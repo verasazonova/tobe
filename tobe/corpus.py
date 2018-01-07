@@ -7,6 +7,8 @@ from polyglot.detect import Detector
 from polyglot.detect.base import UnknownLanguage
 import re
 import argparse
+import csv
+import pandas as pd
 
 TO_BE_VARIANTS = ['am', 'are', 'were', 'was', 'is', 'been', 'being', 'be']
 mask = '----'
@@ -24,15 +26,18 @@ def mask_paragraph(paragraph_tokens, tomask):
 
 
 class Guttenberg():
-    def __init__(self, filename, masking_prob, context_len):
+    def __init__(self, filename, masking_prob, context_len, mask_all=False, with_pos=True, with_direct_speech=False):
         self.filename = filename
         self.masking_prob = masking_prob
         self.tomask = TO_BE_VARIANTS
         self.mask = mask
-        self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
+        self.nlp = spacy.load('en', disable=['parser', 'ner'])
         self.la_count = defaultdict(int)
         self.class_count = defaultdict(int)
         self.context_len = context_len
+        self.mask_all = mask_all
+        self.with_pos = with_pos
+        self.with_direct_speech = with_direct_speech
         print('Loaded')
 
     def preprocess(self, text):
@@ -58,19 +63,46 @@ class Guttenberg():
 
     def to_context(self, paragraph):
         contexts = []
+        features = []
         tags = []
-        doc = self.nlp(self.preprocess(paragraph))
+        text = self.preprocess(paragraph)
+
+        doc = self.nlp(text)
+        masked_text = [self.mask if t.lower_ in self.tomask else t.lower_ for t in doc]
+
         for token in doc:
             tok = token.lower_
             if tok in self.tomask + [self.mask]:
+
+                if not self.mask_all:
+                    masked_text = [self.mask if t.i == token.i else t.lower_ for t in self.nlp(text)]
+
                 self.class_count[tok] += 1
                 tag = tok
-                lefts = doc[max(0, token.i - self.context_len):token.i]
-                rights = doc[token.i + 1:token.i + self.context_len + 1]
+
+                start = max(0, token.i - self.context_len)
+                end = token.i + self.context_len + 1
+
+                lefts = doc[start:token.i]
+                rights = doc[token.i + 1:end]
                 context = [t.lower_ for t in lefts] + [self.mask] + [t.lower_ for t in rights]
-                contexts.append(context + ['<eos>' for _ in range(self.context_len * 2 + 1 - len(context))])
+
+                padding = ['<eos>' for _ in range(self.context_len * 2 + 1 - len(context))]
+
+                feat = []
+                if self.with_pos:
+                    masked_doc = self.nlp(' '.join(masked_text))
+                    context_pos = [t.pos_ for t in masked_doc[start:end]] + padding
+                    feat.append(' '.join(context_pos))
+
+                if self.with_direct_speech:
+                    feat.append(text.count('"') % 2)
+
+                features.append(feat)
+                contexts.append(' '.join(context + padding))
                 tags.append(tag)
-        return contexts, tags
+
+        return contexts, tags, features
 
     def __iter__(self):
         paragraph = ''
@@ -82,15 +114,16 @@ class Guttenberg():
                 else:
                     if paragraph:
                         try:
-                            la = Detector(paragraph, quiet=True).language.code
+                            la = Detector(paragraph, quiet=True).language
+                            self.la_count[la.name] += 1
+                            la = la.code
                         except UnknownLanguage:
                             la = 'un'
-                        self.la_count[la] += 1
                         if la == 'en':
-                            contexts, tags = self.to_context(paragraph)
+                            contexts, tags, features = self.to_context(paragraph)
                             paragraph = ''
-                            for context, tag in zip(contexts, tags):
-                                yield context, tag
+                            for context, tag, feature in zip(contexts, tags, features):
+                                yield context, tag, feature
 
 
 def save_labeled_seq_corpus(corpus, filename):
@@ -127,26 +160,17 @@ def read_labeled_seq_corpus(filename):
 
 def save_context_corpus(corpus, filename, num_lines=None):
     with open(os.path.join('resources', filename), 'w', encoding='utf-8') as fout:
-        for i, (context, tag) in enumerate(corpus):
-            fout.write('{} {}\n'.format(tag, ' '.join(context)))
+        wr = csv.writer(fout, quoting=csv.QUOTE_ALL)
+        for i, (context, tag, feature) in enumerate(corpus):
+            wr.writerow([tag, context] + feature)
+#            fout.write('{} {}\n'.format(tag, ' '.join(context)))
             if num_lines is not None and i == num_lines:
                 break
 
 
 def read_context_corpus(filename):
-    texts = []
-    tags = []
-    with open(filename, 'r', encoding='utf-8') as fin:
-        for line in fin:
-            line = line.strip()
-            data = line.strip().split()
-            if len(data) < 2:
-                print('Error on line: {}'.format(line))
-                exit()
-            tag, *tokens = data
-            texts.append(' '.join(tokens))
-            tags.append(tag)
-    return texts, tags
+    df = pd.read_csv(filename, header=-1)
+    return df
 
 
 def contains_to_be(tokens):
@@ -190,12 +214,12 @@ def main():
     parser.add_argument('--output', default='processed_corpus', help='Output name')
     arguments = parser.parse_args()
 
-    corpus = Guttenberg('resources/corpus.txt', 1, int(arguments.context_len))
+    corpus = Guttenberg('resources/corpus.txt', 1, int(arguments.context_len), with_pos=True, with_direct_speech=True)
     save_context_corpus(corpus, '{}_{}.txt'.format(arguments.output, arguments.context_len))
     print('Language distribution')
-    print(corpus.la_count)
+    print(sorted(corpus.la_count, key=lambda x: x[1], reverse=True))
     print('Classes distribution')
-    print(corpus.class_count)
+    print(sorted(corpus.class_count, key=lambda x: x[1], reverse=True))
 
 
 if __name__ == '__main__':

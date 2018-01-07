@@ -1,5 +1,5 @@
 import numpy as np
-from keras.models import Sequential, model_from_json
+from keras.models import Sequential
 from keras.layers import LSTM, Dense, Embedding, Bidirectional
 from keras.optimizers import Adam
 import spacy
@@ -7,8 +7,8 @@ from spacy.tokens import Doc
 import pandas as pd
 from collections import defaultdict
 
-from keras.callbacks import Callback
-from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
+from keras.callbacks import Callback, ModelCheckpoint
+from sklearn.metrics import precision_recall_fscore_support
 from sklearn.utils.class_weight import compute_class_weight
 
 
@@ -107,10 +107,10 @@ def get_seq_targets(doc_tags,max_length, tag2ind):
     return ys
 
 
-def train(train_texts, train_tags, dev_texts, dev_tags,
+def train(train_texts, train_tags, dev_texts, dev_tags, test_texts, test_tags,
           lstm_settings, tag2ind,
           batch_size=100,
-          nb_epoch=5, by_sentence=True, logs_name='logs.txt'):
+          nb_epoch=5, by_sentence=True, logs_name='logs.txt', model_name='models/weights.hdf5'):
 
     print("Loading spaCy")
     nlp = spacy.load('en_vectors_web_lg')
@@ -152,13 +152,17 @@ def train(train_texts, train_tags, dev_texts, dev_tags,
 
     metrics = Metrics((dev_X, dev_tags), tag2ind, logs_name)
 
+    checkpointer = ModelCheckpoint(filepath=model_name, verbose=1, save_best_only=True)
+
     model.fit(train_X, train_tags,
               validation_data=(dev_X, dev_tags),
               class_weight=class_weights,
               epochs=nb_epoch,
-              callbacks=[metrics],
+              callbacks=[metrics, checkpointer],
               batch_size=batch_size,
               shuffle=True)
+
+    evaluate(model, (test_texts, test_tags), tag2ind)
 
     return model
 
@@ -198,25 +202,21 @@ def get_embeddings(vocab):
     return vocab.vectors.data
 
 
-def evaluate(model_dir, texts, labels, max_length=100):
-    # def create_pipeline(nlp):
-    #     '''
-    #     This could be a lambda, but named functions are easier to read in Python.
-    #     '''
-    #     return [nlp.tagger, nlp.parser, SentimentAnalyser.load(model_dir, nlp,
-    #                                                            max_length=max_length)]
-    #
-    # nlp = spacy.load('en')
-    # nlp.pipeline = create_pipeline(nlp)
-    #
-    # correct = 0
-    # i = 0
-    # for doc in nlp.pipe(texts, batch_size=1000, n_threads=4):
-    #     correct += bool(doc.sentiment >= 0.5) == bool(labels[i])
-    #     i += 1
-    # return float(correct) / i
-    pass
+def evaluate(model, test_data, tag2ind):
+    val_predict = np.argmax(model.predict(test_data[0]), axis=-1)
+    val_targ = np.argmax(test_data[1], axis=-1)
 
+    precision, recall, f_score, true_sum = precision_recall_fscore_support(val_targ, val_predict)
 
+    result = {}
+    for m, name in [(f_score, 'f1'), (precision, 'precision'), (recall, 'recall')]:
+        for key, ind in tag2ind.items():
+            result['{}: {}'.format(name, key)] = m[ind]
+        print('\n{}: {}'.format(name, {key: m[ind] for key, ind in tag2ind.items()}))
 
+    precision, recall, f_score, _ = precision_recall_fscore_support(val_targ, val_predict, average='micro')
+    for m, name in [(f_score, 'f1'), (precision, 'precision'), (recall, 'recall')]:
+        result['OVERALL: {}'.format(name)] = m
+        print('\nOVERALL: {}'.format(name))
 
+    return result

@@ -4,12 +4,11 @@ to be:
 
 Language distribution
     
-    defaultdict(<class 'int'>, {'en': 7356, 'vo': 5, 'fr': 7, 'cy': 12, 'gd': 2, 'sco': 12, 'la': 20, 'ny': 5, 'st': 1, 'rw': 6, 'un': 56, 'sm': 7, 'uz': 2, 'id': 3, 'wo': 2, 'is': 2, 'ha': 7, 'no': 9, 'so': 4, 'ga': 5, 'sa': 1, 'crs': 2, 'ia': 17, 'gv': 2, 'kha': 4, 'de': 6, 'tl': 1, 'haw': 4, 'es': 2, 'it': 1, 'lb': 1, 'da': 3245, 'co': 7, 'zzp': 4, 'fy': 1, 'war': 8, 'tt': 1, 'mg': 4, 'br': 2, 'gn': 2, 'eo': 2, 'xh': 1, 'tn': 1, 'tlh': 1, 'sv': 4, 'nl': 1, 'sk': 1, 'af': 1, 'nn': 3, 'pl': 1, 'rn': 1, 'ms': 1, 'fi': 1})
+    [('English', 7356), ('Danish', 3245), ('un', 56), ('Latin', 20), ('Interlingua', 17), ('Welsh', 12), ('Scots', 12), ('Norwegian', 9), ('Waray', 8), ('French', 7), ('Samoan', 7), ('Hausa', 7), ('Corsican', 7), ('Kinyarwanda', 6), ('German', 6), ('Volapük', 5), ('Nyanja', 5), ('Irish', 5), ('Somali', 4), ('Khasi', 4), ('Hawaiian', 4), ('zzp', 4), ('Malagasy', 4), ('Swedish', 4), ('Indonesian', 3), ('Norwegian Nynorsk', 3), ('Scottish Gaelic', 2), ('Uzbek', 2), ('Wolof', 2), ('Icelandic', 2), ('Seselwa Creole French', 2), ('Manx', 2), ('Spanish', 2), ('Breton', 2), ('Guarani', 2), ('Esperanto', 2), ('Southern Sotho', 1), ('Sanskrit', 1), ('Tagalog', 1), ('Italian', 1), ('Luxembourgish', 1), ('Western Frisian', 1), ('Tatar', 1), ('Xhosa', 1), ('Tswana', 1), ('Klingon', 1), ('Dutch', 1), ('Slovak', 1), ('Afrikaans', 1), ('Polish', 1), ('Rundi', 1), ('Malay', 1), ('Finnish', 1)]
 
 Classes distribution
     
-    defaultdict(<class 'int'>, {'is': 2926, 'was': 8053, 'were': 2255, 'been': 1408, 'be': 2499, 'are': 1074, 'am': 257, 'being': 336, '----': 18})
-
+    [('was', 8053), ('is', 2926), ('be', 2499), ('were', 2255), ('been', 1408), ('are', 1074), ('being', 336), ('am', 257), ('----', 18)]
 
 
 ### Installation

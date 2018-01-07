@@ -1,40 +1,50 @@
 import pandas as pd
 import argparse
 import matplotlib.pyplot as plt
+import matplotlib
+
+font = {'family' : 'normal',
+        'size'   : 8}
+
+matplotlib.rc('font', **font)
 
 
-def plot(filename):
+def plot(filenames):
 
-    df = pd.read_csv(filename)
+    for filename in filenames:
+        df = pd.read_csv(filename)
 
-    print(df.columns.values)
+        plt.figure()
+        f, ax_array = plt.subplots(3, 3, sharex=True, sharey=False)
 
-    f, ax_array = plt.subplots(3, 3, sharex=True, sharey=False)
+        i = 0
+        for name in df.columns.values:
+            if name.startswith('f1'):
+                print(int(i / 3), i % 3, name[3:])
+                ax = ax_array[int(i / 3), (i % 3)]
+                ax.plot(df[name])
+                name = name[4:]
+                ax.plot(df['precision: {}'.format(name)])
+                ax.plot(df['recall: {}'.format(name)])
+                ax.set_title(name)
+                i += 1
 
-    i = 0
-    for name in df.columns.values:
-        if name.startswith('f1'):
-            print(int(i / 3), i % 3, name[3:])
-            ax = ax_array[int(i / 3), (i % 3)]
-            ax.plot(df[name])
-            name = name[4:]
-            ax.plot(df['precision: {}'.format(name)])
-            ax.plot(df['recall: {}'.format(name)])
-            ax.set_title(name)
-            i += 1
+        plt.savefig('scores.pdf')
 
-    plt.savefig('scores.pdf')
 
     plt.figure()
-    plt.plot(df['loss'])
-    plt.plot(df['val_loss'])
-    plt.legend()
-    plt.savefig('losses.pdf')
+
+    for filename in filenames:
+        df = pd.read_csv(filename)
+        plt.plot(df['loss'])
+        plt.plot(df['val_loss'])
+        plt.legend()
+        plt.savefig('losses.pdf')
 
 
 def main():
     parser = argparse.ArgumentParser(description='')
-    parser.add_argument('-f', '--filename', help='Logs filename')
+    parser.add_argument('-f', '--filename', nargs='+', help='Logs filename')
     arguments = parser.parse_args()
 
     plot(arguments.filename)

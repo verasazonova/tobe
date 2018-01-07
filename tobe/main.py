@@ -1,13 +1,11 @@
-import spacy
-import sys
 import argparse
-from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
-import numpy as np
-
-from tobe.corpus import read_context_corpus, TO_BE_VARIANTS, mask, save_labeled_seq_corpus
-import tobe.dl as dl
-
 import logging
+import sys
+
+from sklearn.model_selection import train_test_split
+
+import tobe.dl as dl
+from tobe.corpus import read_context_corpus, TO_BE_VARIANTS, mask
 
 filename = 'resources/masked_text.txt'
 
@@ -15,17 +13,14 @@ FORMAT = "%(asctime)-15s %(clientip)s %(user)-8s %(message)s"
 logging.basicConfig(format=FORMAT)
 
 
-def train(num_epochs, filename, logs_filename):
+def train(num_epochs, filename, logs_filename, model_name):
     tag2ind = {key: i for i, key in enumerate([mask] + TO_BE_VARIANTS)}
 
-    texts, tags = read_context_corpus(filename)
+    df = read_context_corpus(filename)
 
+    tags = list(df[df.columns[0]])
+    texts = list(df[df.columns[1]])
     print('Read in {} texts and {} tags'.format(len(texts), len(tags)))
-
-    # sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2)
-    # for train_index, test_index in sss.split(texts, tags):
-    #     train_texts, X = texts[train_index], texts[test_index]
-    #     train_tags, y = tags[train_index], tags[test_index]
 
     train_texts, X, train_tags, y = train_test_split(texts, tags, test_size=0.2, stratify=tags)
 
@@ -45,8 +40,10 @@ def train(num_epochs, filename, logs_filename):
     print('Created tag index: {}'.format(tag2ind))
     print('Starting to train with settings: {}'.format(settings))
 
-    dl.train(train_texts, train_tags, dev_texts, dev_tags, settings, tag2ind, batch_size=32, nb_epoch=num_epochs,
-             logs_name=logs_filename)
+    dl.train(train_texts, train_tags, dev_texts, dev_tags, test_texts, test_tags,
+             settings, tag2ind,
+             batch_size=32, nb_epoch=num_epochs,
+             logs_name=logs_filename, model_name=model_name)
 
 
 def main():
@@ -55,11 +52,12 @@ def main():
     parser.add_argument('-n', '--num_epochs', help='Num epochs')
     parser.add_argument('--filename', help='Filename')
     parser.add_argument('--logs', help='Logs filename')
+    parser.add_argument('--model', help='Model filename')
     parser.add_argument('--run', action='store_true', help='Train model')
     arguments = parser.parse_args()
 
     if arguments.train:
-        train(int(arguments.num_epochs), arguments.filename, arguments.logs)
+        train(int(arguments.num_epochs), arguments.filename, arguments.logs, arguments.model)
 
     elif arguments.run:
         print(sys.stdout.encoding)
