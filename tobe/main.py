@@ -5,7 +5,9 @@ import sys
 from sklearn.model_selection import train_test_split
 
 import tobe.dl as dl
-from tobe.corpus import read_context_corpus, TO_BE_VARIANTS, mask
+from tobe.corpus import read_context_corpus, TO_BE_VARIANTS, mask, Guttenberg
+
+CONTEXT_LENGTH = 20
 
 filename = 'resources/masked_text.txt'
 
@@ -44,6 +46,12 @@ def train(num_epochs, filename, logs_filename, model_name):
              settings, tag2ind,
              batch_size=32, nb_epoch=num_epochs,
              logs_name=logs_filename, model_name=model_name)
+
+
+def run(filename):
+    with open(filename, 'r', encoding='utf-8') as fin:
+        n = int(fin.readline().strip())
+        corpus = Guttenberg(fin, 1, CONTEXT_LENGTH, with_pos=True, with_direct_speech=True)
 
 
 def main():

@@ -1,5 +1,4 @@
 from numpy.random import choice, sample
-from sklearn.model_selection import train_test_split
 from collections import defaultdict
 import os.path
 import spacy
@@ -14,6 +13,10 @@ TO_BE_VARIANTS = ['am', 'are', 'were', 'was', 'is', 'been', 'being', 'be']
 mask = '----'
 
 
+def preprocess(text):
+    return re.sub('\s+', ' ', text.strip())
+
+
 def mask_paragraph(paragraph_tokens, tomask):
     if isinstance(tomask, int):
         inds = [i for i, token in enumerate(paragraph_tokens) if token.lower_ in TO_BE_VARIANTS]
@@ -26,27 +29,31 @@ def mask_paragraph(paragraph_tokens, tomask):
 
 
 class Guttenberg():
-    def __init__(self, filename, masking_prob, context_len, mask_all=False, with_pos=True, with_direct_speech=False):
-        self.filename = filename
+    def __init__(self, fin , masking_prob, context_len, mask_all=False, with_pos=True, with_direct_speech=False):
+        if isinstance(fin, str):
+            self.fin = open(fin, 'r', encoding='utf-8', errors='surrogateescape')
+        else:
+            self.fin = fin
         self.masking_prob = masking_prob
         self.tomask = TO_BE_VARIANTS
         self.mask = mask
-        self.nlp = spacy.load('en', disable=['parser', 'ner'])
+        self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
         self.la_count = defaultdict(int)
         self.class_count = defaultdict(int)
         self.context_len = context_len
         self.mask_all = mask_all
         self.with_pos = with_pos
+        self.max_len = 500
         self.with_direct_speech = with_direct_speech
         print('Loaded')
 
-    def preprocess(self, text):
-        return re.sub('\s+', ' ', text.strip())
+    def __del__(self):
+        self.fin.close()
 
     def to_labeled_seq(self, paragraph):
         tokens = []
         tags = []
-        doc = self.nlp(self.preprocess(paragraph))
+        doc = self.nlp(preprocess(paragraph))
         for token in doc:
             tok = token.lower_
             tag = 'O'
@@ -65,7 +72,7 @@ class Guttenberg():
         contexts = []
         features = []
         tags = []
-        text = self.preprocess(paragraph)
+        text = preprocess(paragraph)
 
         doc = self.nlp(text)
         masked_text = [self.mask if t.lower_ in self.tomask else t.lower_ for t in doc]
@@ -105,57 +112,19 @@ class Guttenberg():
         return contexts, tags, features
 
     def __iter__(self):
-        paragraph = ''
-        with open(self.filename, 'r', encoding='utf-8', errors='surrogateescape') as fin:
-            for line in fin:
-                line = line.strip()
-                if line:
-                    paragraph += ' ' + line
-                else:
-                    if paragraph:
-                        try:
-                            la = Detector(paragraph, quiet=True).language
-                            self.la_count[la.name] += 1
-                            la = la.code
-                        except UnknownLanguage:
-                            la = 'un'
-                        if la == 'en':
-                            contexts, tags, features = self.to_context(paragraph)
-                            paragraph = ''
-                            for context, tag, feature in zip(contexts, tags, features):
-                                yield context, tag, feature
-
-
-def save_labeled_seq_corpus(corpus, filename):
-    with open(os.path.join('resources', filename), 'w', encoding='utf-8') as fout:
-        for tokens, tags in corpus:
-            for token, tag in zip(tokens, tags):
-                fout.write('{} {}\n'.format(token, tag))
-            fout.write('\n')
-
-
-def read_labeled_seq_corpus(filename):
-    texts = []
-    tags = []
-    tokens = []
-    token_tags = []
-    with open(filename, 'r', encoding='utf-8') as fin:
-        for line in fin:
-            line = line.strip()
-            if line:
-                data = line.strip().split()
-                if len(data) != 2:
-                    print('Error on line: {}'.format(line))
-                    exit()
-                token, tag = data
-                tokens.append(token)
-                token_tags.append(tag)
+        for line in self.fin:
+            paragraph = line.strip()
+            # Need to hack at large paragraphs oh well
+            if len(paragraph.split(' ')) > self.max_len:
+                print('Spliting a very long paragraph')
+                tokens = paragraph.split(' ')
+                chunks = [' '.join(tokens[i:i+self.max_len]) for i in range(int(len(tokens)/300))]
             else:
-                texts.append(' '.join(tokens))
-                tags.append(token_tags)
-                tokens = []
-                token_tags = []
-    return texts, tags
+                chunks = [paragraph]
+            for paragraph in chunks:
+                contexts, tags, features = self.to_context(paragraph)
+                for context, tag, feature in zip(contexts, tags, features):
+                    yield context, tag, feature
 
 
 def save_context_corpus(corpus, filename, num_lines=None):
@@ -173,53 +142,41 @@ def read_context_corpus(filename):
     return df
 
 
-def contains_to_be(tokens):
-    for token in tokens:
-        if token in TO_BE_VARIANTS:
-            return True
-
-    return False
-
-
-def count_classes(corpus, nlp):
-    counts = defaultdict(int)
-    for paragraph in corpus:
-        doc = nlp(paragraph)
-        for token in doc:
-            key = token.lower_
-            if key in TO_BE_VARIANTS:
-                counts[key] += 1
-
-    return counts
-
-
-# TODO: should not read-in the whole file
-def split_train_test_dev(corpus, train_per):
-    processed_corpus = [data for data in corpus]
-
-    train, test = train_test_split(processed_corpus, test_size=1-train_per)
-    test, dev = train_test_split(test, test_size=0.5)
-
-    for dataset, name in [ (train, 'train.txt'), (test, 'test.txt'), (dev, 'dev.txt')]:
-        with open(os.path.join('resources',name), 'w', encoding='utf-8') as fout:
-            for p in dataset:
-                for token, tag in zip(p['tokens'], p['tags']):
-                    fout.write('{} {}\n'.format(token, tag))
-                fout.write('\n')
+def save_english_by_paragraph(filename, filename_out):
+    with open(filename) as fin, open(filename_out, 'w') as fout:
+        paragraph = ''
+        for line in fin:
+            line = line.strip()
+            if line:
+                paragraph += ' ' + line
+            else:
+                if paragraph:
+                    try:
+                        la = Detector(paragraph, quiet=True).language.code
+                    except UnknownLanguage:
+                        la = 'un'
+                    if la == 'en':
+                        fout.write('{}\n'.format(preprocess(paragraph)))
+                        paragraph = ''
 
 
 def main():
     parser = argparse.ArgumentParser(description='')
+    parser.add_argument('--to_english', action='store_true', help='Extract english corpus only')
     parser.add_argument('-n', dest='context_len', help='Context length')
     parser.add_argument('--output', default='processed_corpus', help='Output name')
+    parser.add_argument('--filename', default='processed_corpus', help='Output name')
     arguments = parser.parse_args()
 
-    corpus = Guttenberg('resources/corpus.txt', 1, int(arguments.context_len), with_pos=True, with_direct_speech=True)
-    save_context_corpus(corpus, '{}_{}.txt'.format(arguments.output, arguments.context_len))
-    print('Language distribution')
-    print(sorted(corpus.la_count, key=lambda x: x[1], reverse=True))
-    print('Classes distribution')
-    print(sorted(corpus.class_count, key=lambda x: x[1], reverse=True))
+    if arguments.to_english:
+        save_english_by_paragraph('resources/corpus.txt', arguments.output)
+    else:
+        corpus = Guttenberg(arguments.filename, 1, int(arguments.context_len), with_pos=False, with_direct_speech=False)
+        save_context_corpus(corpus, '{}_{}.txt'.format(arguments.output, arguments.context_len))
+        print('Language distribution')
+        print(sorted(corpus.la_count, key=lambda x: x[1], reverse=True))
+        print('Classes distribution')
+        print(sorted(corpus.class_count, key=lambda x: x[1], reverse=True))
 
 
 if __name__ == '__main__':

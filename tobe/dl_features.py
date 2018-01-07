@@ -1,6 +1,7 @@
 import numpy as np
-from keras.models import Sequential
-from keras.layers import LSTM, Dense, Embedding, Bidirectional
+from keras.models import Model
+import keras
+from keras.layers import LSTM, Dense, Embedding, Bidirectional, Input
 from keras.optimizers import Adam
 import spacy
 from spacy.tokens import Doc
@@ -79,6 +80,15 @@ def get_features(docs, max_length):
     return Xs
 
 
+def get_pos_features(seq, max_length, pos2ind):
+    ps = np.zeros((len(seq), max_length), dtype='int32')
+    print(ps.shape)
+    for i, s in enumerate(seq):
+        for j, pos in enumerate(s.split(' ')):
+            ps[i, j] = pos2ind[pos]
+    return ps
+
+
 def get_cls_targets(tags, tag2ind):
     ys = np.zeros((len(tags), len(tag2ind.keys())), dtype='int32')
     print(ys.shape)
@@ -91,26 +101,26 @@ def get_cls_targets(tags, tag2ind):
     return ys
 
 
-def get_seq_targets(doc_tags,max_length, tag2ind):
-    ys = np.zeros((len(doc_tags), max_length, len(tag2ind.keys())), dtype='int32')
-    for i, doc in enumerate(doc_tags):
-        j = 0
-        for tag in doc:
-            vector_id = tag2ind[tag]
-            if vector_id >= 0:
-                ys[i, j, vector_id] = 1
-            else:
-                ys[i, j, vector_id] = 0
-            j += 1
-            if j >= max_length:
-                break
-    return ys
+# def get_seq_targets(doc_tags,max_length, tag2ind):
+#     ys = np.zeros((len(doc_tags), max_length, len(tag2ind.keys())), dtype='int32')
+#     for i, doc in enumerate(doc_tags):
+#         j = 0
+#         for tag in doc:
+#             vector_id = tag2ind[tag]
+#             if vector_id >= 0:
+#                 ys[i, j, vector_id] = 1
+#             else:
+#                 ys[i, j, vector_id] = 0
+#             j += 1
+#             if j >= max_length:
+#                 break
+#     return ys
 
 
-def train(train_texts, train_tags, dev_texts, dev_tags, test_texts, test_tags,
-          lstm_settings, tag2ind,
+def train(train_texts, train_tags, train_pos, dev_texts, dev_tags, dev_pos, test_texts, test_tags, test_pos,
+          lstm_settings, tag2ind, pos2id,
           batch_size=100,
-          nb_epoch=5, logs_name='logs.txt', model_name='models/weights.hdf5'):
+          nb_epoch=5, by_sentence=True, logs_name='logs.txt', model_name='models/weights.hdf5'):
 
     print("Loading spaCy")
     nlp = spacy.load('en_vectors_web_lg')
@@ -128,11 +138,19 @@ def train(train_texts, train_tags, dev_texts, dev_tags, test_texts, test_tags,
     dev_docs = list(nlp.pipe(dev_texts))
     test_docs = list(nlp.pipe(test_texts))
 
+    # if by_sentence:
+    #     train_docs, train_labels = get_labelled_sentences(train_docs, train_labels)
+    #     dev_docs, dev_labels = get_labelled_sentences(dev_docs, dev_labels)
+
     train_X = get_features(train_docs, lstm_settings['max_length'])
     dev_X = get_features(dev_docs, lstm_settings['max_length'])
     test_X = get_features(test_docs, lstm_settings['max_length'])
 
     print('Got X: {}, {}'.format(train_X.shape, dev_X.shape))
+
+    train_feats = get_pos_features(train_pos, lstm_settings['max_length'], pos2id)
+    dev_feats = get_pos_features(dev_pos, lstm_settings['max_length'], pos2id)
+    test_feats = get_pos_features(test_pos, lstm_settings['max_length'], pos2id)
 
     train_tags = get_cls_targets(train_tags, tag2ind)
     dev_tags = get_cls_targets(dev_tags, tag2ind)
@@ -149,43 +167,72 @@ def train(train_texts, train_tags, dev_texts, dev_tags, test_texts, test_tags,
 
     checkpointer = ModelCheckpoint(filepath=model_name, verbose=1, save_best_only=True)
 
-    model.fit(train_X, train_tags,
-              validation_data=(dev_X, dev_tags),
+    model.fit([train_X, train_feats], [train_tags],
+              validation_data=(dev_X, dev_tags, dev_feats),
               class_weight=class_weights,
               epochs=nb_epoch,
               callbacks=[metrics, checkpointer],
               batch_size=batch_size,
               shuffle=True)
 
-    evaluate(model, (test_X, test_tags), tag2ind)
+    evaluate(model, (test_X, test_tags, test_feats), tag2ind)
 
     return model
 
 
 def compile_lstm(embeddings, settings):
-    model = Sequential()
-    model.add(
-        Embedding(
-            embeddings.shape[0],
-            embeddings.shape[1],
-            input_length=settings['max_length'],
-            trainable=False,
-            weights=[embeddings],
-            mask_zero=True
-        )
-    )
+
+    main_input = Input(shape=(settings['max_length'],), dtype='int32', name='main_input')
+
+    x = Embedding(input_dim=embeddings.shape[0],
+                  output_dim=embeddings.shape[1],
+                  input_length=settings['max_length'],
+                  trainable=False,
+                  weights=[embeddings],
+                  mask_zero=True
+                  )(main_input)
+
+    pos_input = Input(shape=(settings['max_length'],), name='pos_input')
+
+    x = keras.layers.concatenate([x, pos_input])
+
     for i in range(settings['num_lstm']):
         if i == settings['num_lstm'] - 1:
             sequence = False
         else:
             sequence = True
-        model.add(Bidirectional(LSTM(settings['nr_hidden'],
-                                     recurrent_dropout=settings['dropout'],
-                                     return_sequences=sequence,
-                                     dropout=settings['dropout'])))
+        x = Bidirectional(LSTM(settings['nr_hidden'],
+                               recurrent_dropout=settings['dropout'],
+                               return_sequences=sequence,
+                               dropout=settings['dropout']))(x)
 
-    model.add(Dense(settings['nr_class'],
-                    activation='softmax'))
+    main_output = Dense(settings['nr_class'], activation='softmax')(x)
+
+    model = Model(inputs=[main_input, pos_input], outputs=[main_output])
+
+    # model = Sequential()
+    # model.add(
+    #     Embedding(
+    #         embeddings.shape[0],
+    #         embeddings.shape[1],
+    #         input_length=settings['max_length'],
+    #         trainable=False,
+    #         weights=[embeddings],
+    #         mask_zero=True
+    #     )
+    # )
+    # for i in range(settings['num_lstm']):
+    #     if i == settings['num_lstm'] - 1:
+    #         sequence = False
+    #     else:
+    #         sequence = True
+    #     model.add(Bidirectional(LSTM(settings['nr_hidden'],
+    #                                  recurrent_dropout=settings['dropout'],
+    #                                  return_sequences=sequence,
+    #                                  dropout=settings['dropout'])))
+
+    # model.add(Dense(settings['nr_class'],
+    #                 activation='softmax'))
 
     model.compile(optimizer=Adam(lr=settings['lr']),
                   loss='categorical_crossentropy',
