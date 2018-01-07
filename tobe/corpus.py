@@ -31,12 +31,16 @@ class Guttenberg():
         self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
         self.la_count = defaultdict(int)
         self.class_count = defaultdict(int)
+        self.context_len = 4
         print('Loaded')
 
-    def preprocess(self, paragraph):
+    def preprocess(self, text):
+        return re.sub('\s+', ' ', text.strip())
+
+    def to_labeled_seq(self, paragraph):
         tokens = []
         tags = []
-        doc = self.nlp(re.sub('\s+', ' ', paragraph.strip()))
+        doc = self.nlp(self.preprocess(paragraph))
         for token in doc:
             tok = token.lower_
             tag = 'O'
@@ -50,6 +54,22 @@ class Guttenberg():
             tokens.append(tok)
             tags.append(tag)
         return tokens, tags
+
+    def to_context(self, paragraph):
+        contexts = []
+        tags = []
+        doc = self.nlp(self.preprocess(paragraph))
+        for token in doc:
+            tok = token.lower_
+            if tok in self.tomask + [self.mask]:
+                self.class_count[tok] += 1
+                tag = tok
+                lefts = doc[token.i - self.context_len:token.i]
+                rights = doc[token.i + 1:token.i + self.context_len]
+                context = [t.lower_ for t in lefts] + [self.mask] + [t.lower_ for t in rights]
+                contexts.append(context + ['<eos>' for _ in range(self.context_len * 2 + 1 - len(context))])
+                tags.append(tag)
+        return contexts, tags
 
     def __iter__(self):
         paragraph = ''
@@ -66,12 +86,13 @@ class Guttenberg():
                             la = 'un'
                         self.la_count[la] += 1
                         if la == 'en':
-                            data = self.preprocess(paragraph)
+                            contexts, tags = self.to_context(paragraph)
                             paragraph = ''
-                            yield data
+                            for context, tag in zip(contexts, tags):
+                                yield context, tag
 
 
-def save_preprocessed_corpus(corpus, filename):
+def save_labeled_seq_corpus(corpus, filename):
     with open(os.path.join('resources', filename), 'w', encoding='utf-8') as fout:
         for tokens, tags in corpus:
             for token, tag in zip(tokens, tags):
@@ -79,11 +100,11 @@ def save_preprocessed_corpus(corpus, filename):
             fout.write('\n')
 
 
-def read_preprocessed_corpus(filename):
+def read_labeled_seq_corpus(filename):
     texts = []
     tags = []
-    paragraph = []
-    paragraph_tags = []
+    tokens = []
+    token_tags = []
     with open(filename, 'r', encoding='utf-8') as fin:
         for line in fin:
             line = line.strip()
@@ -93,13 +114,37 @@ def read_preprocessed_corpus(filename):
                     print('Error on line: {}'.format(line))
                     exit()
                 token, tag = data
-                paragraph.append(token)
-                paragraph_tags.append(tag)
+                tokens.append(token)
+                token_tags.append(tag)
             else:
-                texts.append(paragraph)
-                tags.append(paragraph_tags)
-                paragraph = []
-                paragraph_tags = []
+                texts.append(' '.join(tokens))
+                tags.append(token_tags)
+                tokens = []
+                token_tags = []
+    return texts, tags
+
+
+def save_context_corpus(corpus, filename, num_lines=None):
+    with open(os.path.join('resources', filename), 'w', encoding='utf-8') as fout:
+        for i, (context, tag) in enumerate(corpus):
+            fout.write('{} {}\n'.format(tag, ' '.join(context)))
+            if num_lines is not None and i == num_lines:
+                break
+
+
+def read_context_forpus(filename):
+    texts = []
+    tags = []
+    with open(filename, 'r', encoding='utf-8') as fin:
+        for line in fin:
+            line = line.strip()
+            data = line.strip().split()
+            if len(data) != 2:
+                print('Error on line: {}'.format(line))
+                exit()
+            tag, *tokens = data
+            texts.append(' '.join(tokens))
+            tags.append(tag)
     return texts, tags
 
 
@@ -140,7 +185,8 @@ def split_train_test_dev(corpus, train_per):
 
 def main():
     corpus = Guttenberg('resources/corpus.txt', 0.6)
-    save_preprocessed_corpus(corpus, 'preprocessed_corpus.txt')
+    #save_labeled_seq_corpus(corpus, 'preprocessed_corpus.txt')
+    save_context_corpus(corpus, 'preprocessed_corpus.txt')
     print('Language distribution')
     print(corpus.la_count)
     print('Classes distribution')

@@ -20,9 +20,40 @@ from keras.optimizers import Adam
 import thinc.extra.datasets
 from spacy.compat import pickle
 import spacy
-
-
 from spacy.tokens import Doc
+
+from keras.callbacks import Callback
+from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
+
+
+class Metrics(Callback):
+    def __init__(self, validation_data):
+        super().__init__()
+        self.validation_data = validation_data
+        print('{}, {}'.format(self.validation_data[0].shape, self.validation_data[1].shape))
+        self.val_f1s = None
+        self.val_precisions = None
+        self.val_recalls = None
+
+    def on_train_begin(self, logs={}):
+        self.val_f1s = []
+        self.val_recalls = []
+        self.val_precisions = []
+
+    def on_epoch_end(self, epoch, logs={}):
+        val_predict = np.argmax(self.model.predict(self.validation_data[0]), axis=-1)
+        print(val_predict.shape)
+        val_targ = np.argmax(self.validation_data[1], axis=-1)
+        print(val_targ.shape)
+
+        precision, recall, f_score, true_sum = precision_recall_fscore_support(val_targ.flatten(), val_predict.flatten())
+
+        self.val_f1s.append(f_score)
+        self.val_recalls.append(recall)
+        self.val_precisions.append(precision)
+        print(' — val_f1: {} — val_precision: {}— val_recall {}'.format(f_score, precision, recall))
+        return
+
 
 class WhitespaceTokenizer(object):
     def __init__(self, vocab):
@@ -63,15 +94,15 @@ def get_features(docs, max_length):
 
 
 def get_targets(doc_tags, max_length, tag2ind):
-    ys = np.zeros((len(doc_tags), max_length), dtype='int32')
+    ys = np.zeros((len(doc_tags), max_length, len(tag2ind.keys())), dtype='int32')
     for i, doc in enumerate(doc_tags):
         j = 0
         for tag in doc:
             vector_id = tag2ind[tag]
             if vector_id >= 0:
-                ys[i, j] = vector_id
+                ys[i, j, vector_id] = 1
             else:
-                ys[i, j] = 0
+                ys[i, j, vector_id] = 0
             j += 1
             if j >= max_length:
                 break
@@ -93,8 +124,8 @@ def train(train_texts, train_tags, dev_texts, dev_tags,
     print(embeddings.shape)
 
     model = compile_lstm(embeddings, lstm_settings)
-    print("Parsing texts...")
 
+    print("Parsing texts...")
     train_docs = list(nlp.pipe(train_texts))
     dev_docs = list(nlp.pipe(dev_texts))
 
@@ -110,11 +141,16 @@ def train(train_texts, train_tags, dev_texts, dev_tags,
     train_tags = get_targets(train_tags, lstm_settings['max_length'], tag2ind)
     dev_tags = get_targets(dev_tags, lstm_settings['max_length'], tag2ind)
 
+    class_weights = {}
+
     print('Got y: {}, {}'.format(train_tags.shape, dev_tags.shape))
+
+    metrics = Metrics((dev_X, dev_tags))
 
     model.fit(train_X, train_tags,
               validation_data=(dev_X, dev_tags),
-              nb_epoch=nb_epoch,
+              epochs=nb_epoch,
+              callbacks=[metrics],
               batch_size=batch_size)
 
     return model
@@ -140,9 +176,10 @@ def compile_lstm(embeddings, settings):
 
     model.add(TimeDistributed(Dense(settings['nr_class'],
                                     activation='softmax')))
+
     model.compile(optimizer=Adam(lr=settings['lr']),
                   loss='categorical_crossentropy',
-                  metrics=['accuracy'])
+                  metrics=['accuracy', 'categorical_accuracy'])
     return model
 
 

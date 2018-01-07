@@ -1,20 +1,10 @@
-from tobe.corpus import mask_paragraph
+from tobe.corpus import Guttenberg, save_context_corpus
 
+def test_save_corpus():
+    corpus = Guttenberg('resources/corpus.txt', 1)
+    save_context_corpus(corpus, 'test_context_corpus.txt', 5)
 
-def test_mask_paragraph(nlp):
-
-    with open('tests/text.txt') as ftext, open('tests/masked_text.txt') as fmasked:
-        for line, masked_line in zip(ftext, fmasked):
-            paragraph = line.strip()
-            paragraph_tokens = nlp(paragraph)
-
-            masked = ' '.join(mask_paragraph(paragraph_tokens, 6))
-
-            masked_gold = masked_line.strip()
-
-            print()
-            print(masked)
-
-            print(masked_gold)
-
-            #assert masked == masked_gold
+    with open('resources/gold_context_corpus.txt') as fgold, open('resources/test_context_corpus.txt') as fin:
+        gold = fgold.readlines()
+        processed = fin.readlines()
+        assert gold == processed

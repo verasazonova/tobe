@@ -4,7 +4,7 @@ import argparse
 from sklearn.model_selection import train_test_split
 import numpy as np
 
-from tobe.corpus import read_preprocessed_corpus, TO_BE_VARIANTS, mask, save_preprocessed_corpus
+from tobe.corpus import read_labeled_seq_corpus, TO_BE_VARIANTS, mask, save_labeled_seq_corpus
 import tobe.dl as dl
 
 import logging
@@ -16,7 +16,7 @@ logging.basicConfig(format=FORMAT)
 
 
 def train():
-    texts, tags = read_preprocessed_corpus('resources/preprocessed_corpus.txt')
+    texts, tags = read_labeled_seq_corpus('resources/preprocessed_corpus.txt')
 
     print(max(len(t) for t in tags), min(len(t) for t in tags))
     print('Read in {} texts and {} tags'.format(len(texts), len(tags)))
@@ -42,11 +42,12 @@ def train():
                 'lr': 0.001,
                 }
 
-    tag2ind = {i: key for i, key in enumerate(['O'] + TO_BE_VARIANTS)}
+    tag2ind = {key: i for i, key in enumerate(['O'] + TO_BE_VARIANTS)}
 
+    print('Created tag index: {}'.format(tag2ind))
     print('Starting to train with settings: {}'.format(settings))
 
-    dl.train(train_texts, train_tags, dev_texts, dev_tags, settings, tag2ind, batch_size=100, nb_epoch=20)
+    dl.train(train_texts, train_tags, dev_texts, dev_tags, settings, tag2ind, batch_size=100, nb_epoch=5)
 
 
 def main():
@@ -70,7 +71,6 @@ def main():
         print(n)
         print(paragraph)
         print()
-
 
 
 if __name__ == '__main__':
