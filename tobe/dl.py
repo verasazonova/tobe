@@ -1,35 +1,20 @@
-"""
-This example shows how to use an LSTM sentiment classification model trained using Keras in spaCy. spaCy splits the document into sentences, and each sentence is classified using the LSTM. The scores for the sentences are then aggregated to give the document score. This kind of hierarchical model is quite difficult in "pure" Keras or Tensorflow, but it's very effective. The Keras example on this dataset performs quite poorly, because it cuts off the documents so that they're a fixed size. This hurts review accuracy a lot, because people often summarise their rating in the final sentence
-
-Prerequisites:
-spacy download en_vectors_web_lg
-pip install keras==2.0.9
-
-Compatible with: spaCy v2.0.0+
-"""
-
-import plac
-import random
-import pathlib
-import cytoolz
 import numpy as np
 from keras.models import Sequential, model_from_json
 from keras.layers import LSTM, Dense, Embedding, Bidirectional
-from keras.layers import TimeDistributed
 from keras.optimizers import Adam
-import thinc.extra.datasets
-from spacy.compat import pickle
 import spacy
 from spacy.tokens import Doc
 
 from keras.callbacks import Callback
 from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
+from sklearn.utils.class_weight import compute_class_weight
 
 
 class Metrics(Callback):
-    def __init__(self, validation_data):
+    def __init__(self, validation_data, tag2ind):
         super().__init__()
         self.validation_data = validation_data
+        self.tag2ind = tag2ind
         print('{}, {}'.format(self.validation_data[0].shape, self.validation_data[1].shape))
         self.val_f1s = None
         self.val_precisions = None
@@ -42,16 +27,14 @@ class Metrics(Callback):
 
     def on_epoch_end(self, epoch, logs={}):
         val_predict = np.argmax(self.model.predict(self.validation_data[0]), axis=-1)
-        print(val_predict.shape)
         val_targ = np.argmax(self.validation_data[1], axis=-1)
-        print(val_targ.shape)
 
-        precision, recall, f_score, true_sum = precision_recall_fscore_support(val_targ.flatten(), val_predict.flatten())
-
+        precision, recall, f_score, true_sum = precision_recall_fscore_support(val_targ, val_predict) #flatten()
         self.val_f1s.append(f_score)
         self.val_recalls.append(recall)
         self.val_precisions.append(precision)
-        print(' — val_f1: {} — val_precision: {}— val_recall {}'.format(f_score, precision, recall))
+        for m, name in [(f_score, 'f1'), (precision, 'precision'), (recall, 'recall')]:
+            print('{}: {}'.format(name, {key: m[ind] for key, ind in self.tag2ind.items()}))
         return
 
 
@@ -93,7 +76,19 @@ def get_features(docs, max_length):
     return Xs
 
 
-def get_targets(doc_tags, max_length, tag2ind):
+def get_cls_targets(tags, tag2ind):
+    ys = np.zeros((len(tags), len(tag2ind.keys())), dtype='int32')
+    print(ys.shape)
+    for i, tag in enumerate(tags):
+        vector_id = tag2ind[tag]
+        if vector_id >= 0:
+            ys[i, vector_id] = 1
+        else:
+            ys[i, vector_id] = 0
+    return ys
+
+
+def get_seq_targets(doc_tags,max_length, tag2ind):
     ys = np.zeros((len(doc_tags), max_length, len(tag2ind.keys())), dtype='int32')
     for i, doc in enumerate(doc_tags):
         j = 0
@@ -138,20 +133,29 @@ def train(train_texts, train_tags, dev_texts, dev_tags,
 
     print('Got X: {}, {}'.format(train_X.shape, dev_X.shape))
 
-    train_tags = get_targets(train_tags, lstm_settings['max_length'], tag2ind)
-    dev_tags = get_targets(dev_tags, lstm_settings['max_length'], tag2ind)
-
-    class_weights = {}
+    train_tags = get_cls_targets(train_tags, tag2ind)
+    dev_tags = get_cls_targets(dev_tags, tag2ind)
 
     print('Got y: {}, {}'.format(train_tags.shape, dev_tags.shape))
 
-    metrics = Metrics((dev_X, dev_tags))
+    train_y = np.argmax(train_tags, axis=-1)
+
+    print(train_y.shape)
+    print(np.unique(train_y))
+    print(tag2ind.keys())
+
+    class_weights = compute_class_weight('balanced', np.unique(train_y), train_y)
+    print('Calculated class_weights: {}'.format(class_weights))
+
+    metrics = Metrics((dev_X, dev_tags), tag2ind)
 
     model.fit(train_X, train_tags,
               validation_data=(dev_X, dev_tags),
+              class_weight=class_weights,
               epochs=nb_epoch,
               callbacks=[metrics],
-              batch_size=batch_size)
+              batch_size=batch_size,
+              shuffle=True)
 
     return model
 
@@ -162,20 +166,24 @@ def compile_lstm(embeddings, settings):
         Embedding(
             embeddings.shape[0],
             embeddings.shape[1],
-            input_length=100, #settings['max_length'],
+            input_length=settings['max_length'],
             trainable=False,
             weights=[embeddings],
             mask_zero=True
         )
     )
-    for _ in range(settings['num_lstm']):
+    for i in range(settings['num_lstm']):
+        if i == settings['num_lstm'] - 1:
+            sequence = False
+        else:
+            sequence = True
         model.add(Bidirectional(LSTM(settings['nr_hidden'],
                                      recurrent_dropout=settings['dropout'],
-                                     return_sequences=True,
+                                     return_sequences=sequence,
                                      dropout=settings['dropout'])))
 
-    model.add(TimeDistributed(Dense(settings['nr_class'],
-                                    activation='softmax')))
+    model.add(Dense(settings['nr_class'],
+                    activation='softmax'))
 
     model.compile(optimizer=Adam(lr=settings['lr']),
                   loss='categorical_crossentropy',

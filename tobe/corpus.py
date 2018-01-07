@@ -6,6 +6,7 @@ import spacy
 from polyglot.detect import Detector
 from polyglot.detect.base import UnknownLanguage
 import re
+import argparse
 
 TO_BE_VARIANTS = ['am', 'are', 'were', 'was', 'is', 'been', 'being', 'be']
 mask = '----'
@@ -23,7 +24,7 @@ def mask_paragraph(paragraph_tokens, tomask):
 
 
 class Guttenberg():
-    def __init__(self, filename, masking_prob):
+    def __init__(self, filename, masking_prob, context_len):
         self.filename = filename
         self.masking_prob = masking_prob
         self.tomask = TO_BE_VARIANTS
@@ -31,7 +32,7 @@ class Guttenberg():
         self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
         self.la_count = defaultdict(int)
         self.class_count = defaultdict(int)
-        self.context_len = 4
+        self.context_len = context_len
         print('Loaded')
 
     def preprocess(self, text):
@@ -65,7 +66,7 @@ class Guttenberg():
                 self.class_count[tok] += 1
                 tag = tok
                 lefts = doc[token.i - self.context_len:token.i]
-                rights = doc[token.i + 1:token.i + self.context_len]
+                rights = doc[token.i + 1:token.i + self.context_len + 1]
                 context = [t.lower_ for t in lefts] + [self.mask] + [t.lower_ for t in rights]
                 contexts.append(context + ['<eos>' for _ in range(self.context_len * 2 + 1 - len(context))])
                 tags.append(tag)
@@ -184,13 +185,17 @@ def split_train_test_dev(corpus, train_per):
 
 
 def main():
-    corpus = Guttenberg('resources/corpus.txt', 0.6)
-    #save_labeled_seq_corpus(corpus, 'preprocessed_corpus.txt')
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('-n', dest='context_len', help='Context length')
+    arguments = parser.parse_args()
+
+    corpus = Guttenberg('resources/corpus.txt', 1, int(arguments.context_len))
     save_context_corpus(corpus, 'preprocessed_corpus.txt')
     print('Language distribution')
     print(corpus.la_count)
     print('Classes distribution')
     print(corpus.class_count)
+
 
 if __name__ == '__main__':
     main()

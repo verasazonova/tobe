@@ -4,7 +4,7 @@ import argparse
 from sklearn.model_selection import train_test_split
 import numpy as np
 
-from tobe.corpus import read_labeled_seq_corpus, TO_BE_VARIANTS, mask, save_labeled_seq_corpus
+from tobe.corpus import read_context_corpus, TO_BE_VARIANTS, mask, save_labeled_seq_corpus
 import tobe.dl as dl
 
 import logging
@@ -16,9 +16,8 @@ logging.basicConfig(format=FORMAT)
 
 
 def train():
-    texts, tags = read_labeled_seq_corpus('resources/preprocessed_corpus.txt')
+    texts, tags = read_context_corpus('resources/preprocessed_corpus.txt')
 
-    print(max(len(t) for t in tags), min(len(t) for t in tags))
     print('Read in {} texts and {} tags'.format(len(texts), len(tags)))
 
     train_texts, X, train_tags, y = train_test_split(texts, tags, test_size=0.2)
@@ -28,26 +27,26 @@ def train():
 
     print('Split into {} train {} dev and {} test sets'.format(len(train_texts), len(dev_texts), len(test_texts)))
 
-    nr_hidden = 64
+    # nr_hidden = 64
     # max_length = 100,  # Shape
     # dropout = 0.5, \
     #           learn_rate = 0.001,  # General NN config
     # nb_epoch = 5, batch_size = 100, nr_examples = -1
 
+    tag2ind = {key: i for i, key in enumerate([mask] + TO_BE_VARIANTS)}
+
     settings = {'nr_hidden': 100,
-                'max_length': 100,
-                'nr_class': len(TO_BE_VARIANTS) + 1,
+                'max_length': max(len(t.split()) for t in texts),
+                'nr_class': len(tag2ind.keys()),
                 'num_lstm': 2,
                 'dropout': 0.5,
                 'lr': 0.001,
                 }
 
-    tag2ind = {key: i for i, key in enumerate(['O'] + TO_BE_VARIANTS)}
-
     print('Created tag index: {}'.format(tag2ind))
     print('Starting to train with settings: {}'.format(settings))
 
-    dl.train(train_texts, train_tags, dev_texts, dev_tags, settings, tag2ind, batch_size=100, nb_epoch=5)
+    dl.train(train_texts, train_tags, dev_texts, dev_tags, settings, tag2ind, batch_size=32, nb_epoch=50)
 
 
 def main():
