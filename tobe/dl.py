@@ -4,6 +4,8 @@ from keras.layers import LSTM, Dense, Embedding, Bidirectional
 from keras.optimizers import Adam
 import spacy
 from spacy.tokens import Doc
+import pandas as pd
+from collections import defaultdict
 
 from keras.callbacks import Callback
 from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
@@ -11,31 +13,32 @@ from sklearn.utils.class_weight import compute_class_weight
 
 
 class Metrics(Callback):
-    def __init__(self, validation_data, tag2ind):
+    def __init__(self, validation_data, tag2ind, logs_name):
         super().__init__()
         self.validation_data = validation_data
         self.tag2ind = tag2ind
         print('{}, {}'.format(self.validation_data[0].shape, self.validation_data[1].shape))
-        self.val_f1s = None
-        self.val_precisions = None
-        self.val_recalls = None
+        self.history = None
+        self.logs_name = logs_name
 
     def on_train_begin(self, logs={}):
-        self.val_f1s = []
-        self.val_recalls = []
-        self.val_precisions = []
+        self.history = defaultdict(list)
 
     def on_epoch_end(self, epoch, logs={}):
         val_predict = np.argmax(self.model.predict(self.validation_data[0]), axis=-1)
         val_targ = np.argmax(self.validation_data[1], axis=-1)
 
         precision, recall, f_score, true_sum = precision_recall_fscore_support(val_targ, val_predict) #flatten()
-        self.val_f1s.append(f_score)
-        self.val_recalls.append(recall)
-        self.val_precisions.append(precision)
+        for k, v in logs.items():
+            self.history[k].append(v)
         for m, name in [(f_score, 'f1'), (precision, 'precision'), (recall, 'recall')]:
-            print('{}: {}'.format(name, {key: m[ind] for key, ind in self.tag2ind.items()}))
+            for key, ind in self.tag2ind.items():
+                self.history['{}: {}'.format(name, key)].append(m[ind])
+            print('\n{}: {}'.format(name, {key: m[ind] for key, ind in self.tag2ind.items()}))
         return
+
+    def on_train_end(self, logs={}):
+        pd.DataFrame.from_dict(self.history, orient='index').transpose().to_csv(self.logs_name)
 
 
 class WhitespaceTokenizer(object):
@@ -107,7 +110,7 @@ def get_seq_targets(doc_tags,max_length, tag2ind):
 def train(train_texts, train_tags, dev_texts, dev_tags,
           lstm_settings, tag2ind,
           batch_size=100,
-          nb_epoch=5, by_sentence=True):
+          nb_epoch=5, by_sentence=True, logs_name='logs.txt'):
 
     print("Loading spaCy")
     nlp = spacy.load('en_vectors_web_lg')
@@ -147,7 +150,7 @@ def train(train_texts, train_tags, dev_texts, dev_tags,
     class_weights = compute_class_weight('balanced', np.unique(train_y), train_y)
     print('Calculated class_weights: {}'.format(class_weights))
 
-    metrics = Metrics((dev_X, dev_tags), tag2ind)
+    metrics = Metrics((dev_X, dev_tags), tag2ind, logs_name)
 
     model.fit(train_X, train_tags,
               validation_data=(dev_X, dev_tags),

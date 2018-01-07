@@ -23,4 +23,3 @@ def test_read_corpus():
 
     assert texts == gold_texts
     assert tags == gold_tags
-

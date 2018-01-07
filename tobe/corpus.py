@@ -65,7 +65,7 @@ class Guttenberg():
             if tok in self.tomask + [self.mask]:
                 self.class_count[tok] += 1
                 tag = tok
-                lefts = doc[token.i - self.context_len:token.i]
+                lefts = doc[max(0, token.i - self.context_len):token.i]
                 rights = doc[token.i + 1:token.i + self.context_len + 1]
                 context = [t.lower_ for t in lefts] + [self.mask] + [t.lower_ for t in rights]
                 contexts.append(context + ['<eos>' for _ in range(self.context_len * 2 + 1 - len(context))])
@@ -187,10 +187,11 @@ def split_train_test_dev(corpus, train_per):
 def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('-n', dest='context_len', help='Context length')
+    parser.add_argument('--output', default='processed_corpus', help='Output name')
     arguments = parser.parse_args()
 
     corpus = Guttenberg('resources/corpus.txt', 1, int(arguments.context_len))
-    save_context_corpus(corpus, 'preprocessed_corpus.txt')
+    save_context_corpus(corpus, '{}_{}.txt'.format(arguments.output, arguments.context_len))
     print('Language distribution')
     print(corpus.la_count)
     print('Classes distribution')
