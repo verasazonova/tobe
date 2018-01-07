@@ -37,7 +37,7 @@ class Guttenberg():
         self.masking_prob = masking_prob
         self.tomask = TO_BE_VARIANTS
         self.mask = mask
-        self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
+        self.nlp = spacy.load('en', disable=['parser', 'ner'])
         self.la_count = defaultdict(int)
         self.class_count = defaultdict(int)
         self.context_len = context_len
@@ -171,7 +171,7 @@ def main():
     if arguments.to_english:
         save_english_by_paragraph('resources/corpus.txt', arguments.output)
     else:
-        corpus = Guttenberg(arguments.filename, 1, int(arguments.context_len), with_pos=False, with_direct_speech=False)
+        corpus = Guttenberg(arguments.filename, 1, int(arguments.context_len), with_pos=True, with_direct_speech=True)
         save_context_corpus(corpus, '{}_{}.txt'.format(arguments.output, arguments.context_len))
         print('Language distribution')
         print(sorted(corpus.la_count, key=lambda x: x[1], reverse=True))
