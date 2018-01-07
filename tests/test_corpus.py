@@ -1,4 +1,5 @@
-from tobe.corpus import Guttenberg, save_context_corpus
+from tobe.corpus import Guttenberg, save_context_corpus, read_context_corpus
+
 
 def test_save_corpus():
     corpus = Guttenberg('resources/corpus.txt', 1)
@@ -8,3 +9,18 @@ def test_save_corpus():
         gold = fgold.readlines()
         processed = fin.readlines()
         assert gold == processed
+
+
+def test_read_corpus():
+    texts, tags = read_context_corpus('resources/gold_context_corpus.txt')
+    gold_texts = ['---- for the use <eos> <eos> <eos> <eos> <eos>',
+                  'xxxvii . the packet ---- opened 297 <eos> <eos>',
+                  'white water . it ---- the first day <eos>',
+                  'seen . three canoes ---- engaged in the <eos>',
+                  'in the nearest canoe ---- a fine figure <eos>',
+                  'on the bank had ---- holding his breath <eos>']
+    gold_tags = ['is', 'is', 'was', 'were', 'was', 'been']
+
+    assert texts == gold_texts
+    assert tags == gold_tags
+

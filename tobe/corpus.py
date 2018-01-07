@@ -132,14 +132,14 @@ def save_context_corpus(corpus, filename, num_lines=None):
                 break
 
 
-def read_context_forpus(filename):
+def read_context_corpus(filename):
     texts = []
     tags = []
     with open(filename, 'r', encoding='utf-8') as fin:
         for line in fin:
             line = line.strip()
             data = line.strip().split()
-            if len(data) != 2:
+            if len(data) < 2:
                 print('Error on line: {}'.format(line))
                 exit()
             tag, *tokens = data
