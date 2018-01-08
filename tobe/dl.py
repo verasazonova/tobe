@@ -10,6 +10,8 @@ from sklearn.metrics import precision_recall_fscore_support, classification_repo
 from sklearn.utils.class_weight import compute_class_weight
 from keras.models import load_model
 
+import logging
+
 
 class Metrics(Callback):
     """A metrics class to calculate precision, recall and f1 score at the end of each epoch
@@ -19,7 +21,6 @@ class Metrics(Callback):
         super().__init__()
         self.validation_data = validation_data
         self.tag2ind = tag2ind
-        print('{}, {}'.format(self.validation_data[0].shape, self.validation_data[1].shape))
         self.history = None
         self.logs_name = logs_name
 
@@ -30,13 +31,13 @@ class Metrics(Callback):
         val_predict = np.argmax(self.model.predict(self.validation_data[0]), axis=-1)
         val_targ = np.argmax(self.validation_data[1], axis=-1)
 
-        precision, recall, f_score, true_sum = precision_recall_fscore_support(val_targ, val_predict) #flatten()
+        precision, recall, f_score, true_sum = precision_recall_fscore_support(val_targ, val_predict)
         for k, v in logs.items():
             self.history[k].append(v)
         for m, name in [(f_score, 'f1'), (precision, 'precision'), (recall, 'recall')]:
             for key, ind in self.tag2ind.items():
                 self.history['{}: {}'.format(name, key)].append(m[ind])
-            print('\n{}: {}'.format(name, {key: m[ind] for key, ind in self.tag2ind.items()}))
+            logging.info('\n{}: {}'.format(name, {key: m[ind] for key, ind in self.tag2ind.items()}))
         return
 
     def on_train_end(self, logs={}):
@@ -46,7 +47,7 @@ class Metrics(Callback):
 def calculate_class_weight(y):
     train_y = np.argmax(y, axis=-1)
     class_weights = compute_class_weight('balanced', np.unique(train_y), train_y)
-    print('Calculated class_weights: {}'.format(class_weights))
+    logging.info('Calculated class_weights: {}'.format(class_weights))
     return class_weights
 
 
@@ -55,7 +56,7 @@ def train(train_X, train_y, dev_data, test_data,
           batch_size=100,
           nb_epoch=5, logs_name='logs.txt', model_name='models/weights.hdf5'):
 
-    print(embeddings.shape)
+    logging.info('Got embeddings with shape {}'.format(embeddings.shape))
 
     model = compile_lstm(embeddings, lstm_settings)
 

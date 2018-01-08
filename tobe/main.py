@@ -9,11 +9,6 @@ import spacy
 import tobe.dl as dl
 from tobe.corpus import read_context_corpus, TO_BE_VARIANTS, mask, Guttenberg
 
-CONTEXT_LENGTH = 20
-MAX_LEN = 0
-
-filename = 'resources/masked_text.txt'
-
 
 class WhitespaceTokenizer(object):
     def __init__(self, vocab):
@@ -91,22 +86,22 @@ def featurize(texts, tags, tag2ind):
         embeddings (numpy.array(vocabulary_size, num_dimensions)): embeddings
     """
 
+    logging.debug("Loading spaCy")
     nlp = spacy.load('en_vectors_web_lg')
     #nlp = spacy.load('en', disable=['tagger', 'parser', 'ner'])
-    logging.debug("Loading spaCy")
     #nlp.add_pipe(nlp.create_pipe('sentencizer'))
     nlp.tokenizer = WhitespaceTokenizer(nlp.vocab)
-    logging.debug(nlp.pipeline)
+    logging.info(nlp.pipeline)
 
-    logging.debug("Parsing texts...")
+    logging.info("Parsing texts.")
     docs = list(nlp.pipe(texts))
     max_len = len(docs[0])
     X = get_features(docs, max_len)
 
-    logging.debug('Got X: {}'.format(X.shape))
+    logging.info('Got X: {}'.format(X.shape))
 
     y = get_cls_targets(tags, tag2ind)
-    logging.debug('Got y: {}'.format(y.shape))
+    logging.info('Got y: {}'.format(y.shape))
 
     embeddings = get_embeddings(nlp.vocab)
 
@@ -133,16 +128,16 @@ def train_or_evaluate(num_epochs, filename, logs_filename, model_name, evaluate=
 
     tags = list(df[df.columns[0]])
     texts = list(df[df.columns[1]])
-    logging.debug('Read in {} texts and {} tags'.format(len(texts), len(tags)))
+    logging.info('Read in {} texts and {} tags'.format(len(texts), len(tags)))
 
     X, y, embeddings = featurize(texts, tags, tag2ind)
 
     train_X, X, train_y, y = train_test_split(X, y, test_size=0.2, stratify=y)
 
-    logging.debug('Read in {} texts and {} tags, {}, {}'.format(len(train_X), len(train_y), len(X), len(y)))
+    logging.info('Read in {} texts and {} tags, {}, {}'.format(len(train_X), len(train_y), len(X), len(y)))
     test_X, dev_X, test_y, dev_y = train_test_split(X, y, test_size=0.5, stratify=y)
 
-    logging.debug('Split into {} train {} dev and {} test sets'.format(len(train_X), len(dev_X), len(test_X)))
+    logging.info('Split into {} train {} dev and {} test sets'.format(len(train_X), len(dev_X), len(test_X)))
 
     settings = {'nr_hidden': 100,
                 'max_length': max(len(t.split()) for t in texts),
@@ -152,16 +147,16 @@ def train_or_evaluate(num_epochs, filename, logs_filename, model_name, evaluate=
                 'lr': 0.001,
                 }
 
-    logging.debug('Created tag index: {}'.format(tag2ind))
-    logging.debug('Starting to train with settings: {}'.format(settings))
+    logging.info('Created tag index: {}'.format(tag2ind))
+    logging.info('Starting to train with settings: {}'.format(settings))
 
     if evaluate:
-        logging.debug('reading the model')
+        logging.info('Reading the model')
         model = dl.read_model(model_name)
-        logging.debug('Evaluating on dev')
+        print('Evaluating on dev')
         dl.evaluate(model, (dev_X, dev_y), tag2ind)
 
-        logging.debug('Evaluating on test')
+        print('Evaluating on test')
         dl.evaluate(model, (test_X, test_y), tag2ind)
 
     else:
@@ -229,7 +224,7 @@ def main():
 
     elif arguments.run:
         logging.info('Checking the model')
-        run(arguments.filename, 5)
+        run(arguments.filename, 'result.txt', 5)
 
 
 if __name__ == '__main__':

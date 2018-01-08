@@ -31,7 +31,6 @@ def plot(filenames):
 
         plt.savefig('scores.pdf')
 
-
     plt.figure()
 
     for filename in filenames:
