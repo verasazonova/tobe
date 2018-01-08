@@ -2,6 +2,11 @@ import numpy as np
 import argparse
 import spacy
 
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, precision_recall_fscore_support, confusion_matrix
+from sklearn.naive_bayes import GaussianNB
+from sklearn.utils.class_weight import compute_class_weight
+from sklearn.svm import SVC
 
 from tobe.corpus import read_context_corpus
 from tobe.dl import WhitespaceTokenizer
@@ -50,6 +55,8 @@ def dataframe_to_arrays(df):
     Xs = np.concatenate([Xs] + feats, axis=1)
     print(Xs.shape)
 
+    return Xs, ys
+
 
 def get_features(docs, max_length):
     docs = list(docs)
@@ -75,6 +82,7 @@ def get_cls_targets(tags, max_length, tag2ind):
     return ys
 
 
+
 def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--filename', help='Filename')
@@ -82,7 +90,19 @@ def main():
 
     df = read_context_corpus(arguments.filename)
 
-    dataframe_to_arrays(df)
+    X, y = dataframe_to_arrays(df)
+    train_X, X, train_y, y = train_test_split(X, y, test_size=0.2, stratify=y)
+    test_X, dev_X, test_y, dev_y = train_test_split(X, y, test_size=0.5, stratify=y)
+
+    class_weights = compute_class_weight('balanced', np.unique(train_y), train_y)
+    clf = SVC(class_weight=class_weights)
+
+    clf.fit(train_X, train_y)
+
+    predicted = clf.predict(dev_X)
+    precision, recall, f_score, true_sum = precision_recall_fscore_support(dev_y, predicted)
+    print(classification_report(dev_y, predicted))
+
 
 if __name__ == '__main__':
     main()

@@ -8,7 +8,7 @@ import pandas as pd
 from collections import defaultdict
 
 from keras.callbacks import Callback, ModelCheckpoint
-from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import precision_recall_fscore_support, classification_report, confusion_matrix
 from sklearn.utils.class_weight import compute_class_weight
 from keras.models import load_model
 
@@ -107,57 +107,61 @@ def get_seq_targets(doc_tags, max_length, tag2ind):
     return ys
 
 
-def train(train_texts, train_tags, dev_texts, dev_tags, test_texts, test_tags,
+def train(train_X, train_y, dev_data, test_data,
           lstm_settings, tag2ind,
           batch_size=100,
           nb_epoch=5, logs_name='logs.txt', model_name='models/weights.hdf5'):
 
-    print("Loading spaCy")
-    nlp = spacy.load('en_vectors_web_lg')
-    nlp.add_pipe(nlp.create_pipe('sentencizer'))
-    nlp.tokenizer = WhitespaceTokenizer(nlp.vocab)
-    print(nlp.pipeline)
-
+    # print("Loading spaCy")
+    # nlp = spacy.load('en_vectors_web_lg')
+    # nlp.add_pipe(nlp.create_pipe('sentencizer'))
+    # nlp.tokenizer = WhitespaceTokenizer(nlp.vocab)
+    # print(nlp.pipeline)
+    #
     embeddings = get_embeddings(nlp.vocab)
     print(embeddings.shape)
 
     model = compile_lstm(embeddings, lstm_settings)
 
-    print("Parsing texts...")
-    train_docs = list(nlp.pipe(train_texts))
-    dev_docs = list(nlp.pipe(dev_texts))
-    test_docs = list(nlp.pipe(test_texts))
+    # print("Parsing texts...")
+    # train_docs = list(nlp.pipe(train_texts))
+    # dev_docs = list(nlp.pipe(dev_texts))
+    # test_docs = list(nlp.pipe(test_texts))
+    #
+    # train_X = get_features(train_docs, lstm_settings['max_length'])
+    # dev_X = get_features(dev_docs, lstm_settings['max_length'])
+    # test_X = get_features(test_docs, lstm_settings['max_length'])
+    #
+    # print('Got X: {}, {}'.format(train_X.shape, dev_X.shape))
+    #
+    # train_tags = get_cls_targets(train_tags, tag2ind)
+    # dev_tags = get_cls_targets(dev_tags, tag2ind)
+    # test_tags = get_cls_targets(test_tags, tag2ind)
+    #
+    # print('Got y: {}, {}'.format(train_tags.shape, dev_tags.shape))
+    #
 
-    train_X = get_features(train_docs, lstm_settings['max_length'])
-    dev_X = get_features(dev_docs, lstm_settings['max_length'])
-    test_X = get_features(test_docs, lstm_settings['max_length'])
-
-    print('Got X: {}, {}'.format(train_X.shape, dev_X.shape))
-
-    train_tags = get_cls_targets(train_tags, tag2ind)
-    dev_tags = get_cls_targets(dev_tags, tag2ind)
-    test_tags = get_cls_targets(test_tags, tag2ind)
-
-    print('Got y: {}, {}'.format(train_tags.shape, dev_tags.shape))
-
-    train_y = np.argmax(train_tags, axis=-1)
-
+    train_y = np.argmax(train_y, axis=-1)
     class_weights = compute_class_weight('balanced', np.unique(train_y), train_y)
     print('Calculated class_weights: {}'.format(class_weights))
 
-    metrics = Metrics((dev_X, dev_tags), tag2ind, logs_name)
+    metrics = Metrics(dev_data, tag2ind, logs_name)
 
     checkpointer = ModelCheckpoint(filepath=model_name, verbose=1, save_best_only=True)
 
-    model.fit(train_X, train_tags,
-              validation_data=(dev_X, dev_tags),
+    model.fit(train_X, train_y,
+              validation_data=dev_data,
               class_weight=class_weights,
               epochs=nb_epoch,
               callbacks=[metrics, checkpointer],
               batch_size=batch_size,
               shuffle=True)
 
-    print(evaluate(model, (test_X, test_tags), tag2ind))
+    print('Evaluating on dev')
+    print(evaluate(model, dev_data, tag2ind))
+
+    print('Evaluating on test')
+    print(evaluate(model, test_data, tag2ind))
 
     return model
 
@@ -202,8 +206,6 @@ def read_model(filename):
 
 
 def evaluate(model, test_data, tag2ind):
-    print(test_data[0].shape)
-    print(test_data[1].shape)
     val_predict = np.argmax(model.predict(test_data[0]), axis=-1)
     val_targ = np.argmax(test_data[1], axis=-1)
 
@@ -213,11 +215,14 @@ def evaluate(model, test_data, tag2ind):
     for m, name in [(f_score, 'f1'), (precision, 'precision'), (recall, 'recall')]:
         for key, ind in tag2ind.items():
             result['{}: {}'.format(name, key)] = m[ind]
-        print('\n{}: {}'.format(name, {key: m[ind] for key, ind in tag2ind.items()}))
 
     precision, recall, f_score, _ = precision_recall_fscore_support(val_targ, val_predict, average='micro')
     for m, name in [(f_score, 'f1'), (precision, 'precision'), (recall, 'recall')]:
         result['OVERALL: {}'.format(name)] = m
-        print('\nOVERALL: {} {}'.format(name, m))
+
+    print(classification_report(val_targ, val_predict, target_names=tag2ind.keys()))
+
+    print(tag2ind.keys())
+    print(confusion_matrix(val_targ, val_predict))
 
     return result
