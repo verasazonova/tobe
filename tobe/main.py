@@ -64,8 +64,9 @@ def get_cls_targets(tags, tag2ind):
 
 
 def featurize(texts, tags, tag2ind):
-    print("Loading spaCy")
+
     nlp = spacy.load('en_vectors_web_lg')
+    print("Loading spaCy")
     nlp.add_pipe(nlp.create_pipe('sentencizer'))
     nlp.tokenizer = WhitespaceTokenizer(nlp.vocab)
     print(nlp.pipeline)
@@ -80,7 +81,10 @@ def featurize(texts, tags, tag2ind):
     y = get_cls_targets(tags, tag2ind)
     print('Got y: {}'.format(y.shape))
 
-    return X, y
+    embeddings = get_embeddings(nlp.vocab)
+    print(embeddings.shape)
+
+    return X, y, embeddings
 
 
 def train(num_epochs, filename, logs_filename, model_name, evaluate=False):
@@ -92,7 +96,7 @@ def train(num_epochs, filename, logs_filename, model_name, evaluate=False):
     texts = list(df[df.columns[1]])
     print('Read in {} texts and {} tags'.format(len(texts), len(tags)))
 
-    X, y = featurize(texts, tags, tag2ind)
+    X, y, embeddings = featurize(texts, tags, tag2ind)
 
     train_X, X, train_y, y = train_test_split(X, y, test_size=0.2, stratify=y)
 
@@ -102,7 +106,7 @@ def train(num_epochs, filename, logs_filename, model_name, evaluate=False):
     print('Split into {} train {} dev and {} test sets'.format(len(train_X), len(dev_X), len(test_X)))
 
     settings = {'nr_hidden': 100,
-                # 'max_length': max(len(t.split()) for t in texts),
+                'max_length': max(len(t.split()) for t in texts),
                 'nr_class': len(tag2ind.keys()),
                 'num_lstm': 2,
                 'dropout': 0.5,
@@ -116,23 +120,45 @@ def train(num_epochs, filename, logs_filename, model_name, evaluate=False):
         print('reading the model')
         model = dl.read_model(model_name)
         print('Evaluating on dev')
-        result = dl.evaluate(model, (dev_X, dev_y), tag2ind)
+        dl.evaluate(model, (dev_X, dev_y), tag2ind)
 
         print('Evaluating on test')
-        result = dl.evaluate(model, (test_X, test_y), tag2ind)
+        dl.evaluate(model, (test_X, test_y), tag2ind)
 
     else:
         dl.train(train_X, train_y, (dev_X, dev_y), (test_X, test_y),
-                 settings, tag2ind,
+                 settings, tag2ind, embeddings,
                  batch_size=32, nb_epoch=num_epochs,
                  logs_name=logs_filename, model_name=model_name)
 
 
-def run(filename):
+def run(filename, context_len=5):
+    keys = [mask] + TO_BE_VARIANTS
+    tag2ind = {key: i for i, key in enumerate(keys)}
     with open(filename, 'r', encoding='utf-8') as fin:
         n = int(fin.readline().strip())
-        corpus = Guttenberg(fin, 1, CONTEXT_LENGTH, with_pos=True, with_direct_speech=True)
+        print('Expecting {} masked verbs'.format(n))
+        text = [' '.join(fin.readlines())]
+        corpus = Guttenberg(text, 1, context_len, with_pos=False, with_direct_speech=False, mask_only=True)
 
+        tags = []
+        texts = []
+        for context, tag, feature in corpus:
+            tags.append(tag)
+            texts.append(context)
+
+        print('Read in {} texts and {} tags'.format(len(texts), len(tags)))
+        for text in texts:
+            print(text)
+
+        X, _, _ = featurize(texts, tags, tag2ind)
+
+    model_name = 'models/weights_{}.hdf5'.format(context_len)
+    model = dl.read_model(model_name)
+
+    pred = np.argmax(model.predict(X), axis=-1)
+    for p in pred:
+        print(keys[p])
 
 
 def main():
@@ -150,17 +176,8 @@ def main():
         train(int(arguments.num_epochs), arguments.filename, arguments.logs, arguments.model, arguments.evaluate)
 
     elif arguments.run:
-        print(sys.stdout.encoding)
 
-        data = open(filename).readlines()
-        if len(data) != 2:
-            print('Error: {} lines in the file: {}'.format(len(data), filename))
-        n = int(data[0].strip())
-        paragraph = data[1].strip()
-
-        print(n)
-        print(paragraph)
-        print()
+        run(arguments.filename, 5)
 
 
 if __name__ == '__main__':

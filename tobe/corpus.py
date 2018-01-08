@@ -29,7 +29,8 @@ def mask_paragraph(paragraph_tokens, tomask):
 
 
 class Guttenberg():
-    def __init__(self, fin , masking_prob, context_len, mask_all=False, with_pos=True, with_direct_speech=False):
+    def __init__(self, fin, masking_prob, context_len,
+                 mask_all=False, with_pos=True, with_direct_speech=False, mask_only=False):
         if isinstance(fin, str):
             self.fin = open(fin, 'r', encoding='utf-8', errors='surrogateescape')
         else:
@@ -37,7 +38,7 @@ class Guttenberg():
         self.masking_prob = masking_prob
         self.tomask = TO_BE_VARIANTS
         self.mask = mask
-        self.nlp = spacy.load('en', disable=['parser', 'ner'])
+        self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
         self.la_count = defaultdict(int)
         self.class_count = defaultdict(int)
         self.context_len = context_len
@@ -45,28 +46,12 @@ class Guttenberg():
         self.with_pos = with_pos
         self.max_len = 500
         self.with_direct_speech = with_direct_speech
+        self.mask_only = mask_only
         print('Loaded')
 
     def __del__(self):
-        self.fin.close()
-
-    def to_labeled_seq(self, paragraph):
-        tokens = []
-        tags = []
-        doc = self.nlp(preprocess(paragraph))
-        for token in doc:
-            tok = token.lower_
-            tag = 'O'
-            if tok == self.mask:
-                self.class_count[tok] += 1
-            if tok in self.tomask:
-                self.class_count[tok] += 1
-                if sample() <= self.masking_prob:
-                    tag = tok
-                    tok = self.mask
-            tokens.append(tok)
-            tags.append(tag)
-        return tokens, tags
+        if hasattr(self.fin, 'close'):
+            self.fin.close()
 
     def to_context(self, paragraph):
         contexts = []
@@ -74,12 +59,17 @@ class Guttenberg():
         tags = []
         text = preprocess(paragraph)
 
+        if self.mask_only:
+            context_centers = [self.mask]
+        else:
+            context_centers = self.tomask + [self.mask]
+
         doc = self.nlp(text)
         masked_text = [self.mask if t.lower_ in self.tomask else t.lower_ for t in doc]
 
         for token in doc:
             tok = token.lower_
-            if tok in self.tomask + [self.mask]:
+            if tok in context_centers:
 
                 if not self.mask_all:
                     masked_text = [self.mask if t.i == token.i else t.lower_ for t in self.nlp(text)]
@@ -163,6 +153,8 @@ def save_english_by_paragraph(filename, filename_out):
 def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--to_english', action='store_true', help='Extract english corpus only')
+    parser.add_argument('--pos', action='store_true', help='With pos')
+    parser.add_argument('--dir_speech', action='store_true', help='Direct speech')
     parser.add_argument('-n', dest='context_len', help='Context length')
     parser.add_argument('--output', default='processed_corpus', help='Output name')
     parser.add_argument('--filename', default='processed_corpus', help='Output name')
@@ -171,7 +163,9 @@ def main():
     if arguments.to_english:
         save_english_by_paragraph('resources/corpus.txt', arguments.output)
     else:
-        corpus = Guttenberg(arguments.filename, 1, int(arguments.context_len), with_pos=True, with_direct_speech=True)
+        corpus = Guttenberg(arguments.filename, 1, int(arguments.context_len),
+                            with_pos=arguments.pos,
+                            with_direct_speech=arguments.dir_speech)
         save_context_corpus(corpus, '{}_{}.txt'.format(arguments.output, arguments.context_len))
         print('Language distribution')
         print(sorted(corpus.la_count, key=lambda x: x[1], reverse=True))

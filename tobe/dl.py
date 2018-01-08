@@ -2,15 +2,14 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Embedding, Bidirectional
 from keras.optimizers import Adam
-import spacy
-from spacy.tokens import Doc
 import pandas as pd
 from collections import defaultdict
 
 from keras.callbacks import Callback, ModelCheckpoint
-from sklearn.metrics import precision_recall_fscore_support, classification_report, confusion_matrix
+from sklearn.metrics import precision_recall_fscore_support, classification_report, confusion_matrix, accuracy_score
 from sklearn.utils.class_weight import compute_class_weight
 from keras.models import load_model
+
 
 class Metrics(Callback):
     def __init__(self, validation_data, tag2ind, logs_name):
@@ -41,109 +40,21 @@ class Metrics(Callback):
         pd.DataFrame.from_dict(self.history, orient='index').transpose().to_csv(self.logs_name)
 
 
-class WhitespaceTokenizer(object):
-    def __init__(self, vocab):
-        self.vocab = vocab
-
-    def __call__(self, text):
-        words = text.split(' ')
-        # All tokens 'own' a subsequent space character in this tokenizer
-        spaces = [True] * len(words)
-        return Doc(self.vocab, words=words, spaces=spaces)
-
-
-def get_labelled_sentences(docs, doc_labels):
-    labels = []
-    sentences = []
-    for doc, y in zip(docs, doc_labels):
-        for sent in doc.sents:
-            sentences.append(sent)
-            labels.append(y)
-    return sentences, np.asarray(labels, dtype='int32')
-
-
-def get_features(docs, max_length):
-    docs = list(docs)
-    Xs = np.zeros((len(docs), max_length), dtype='int32')
-    for i, doc in enumerate(docs):
-        j = 0
-        for token in doc:
-            vector_id = token.vocab.vectors.find(key=token.orth)
-            if vector_id >= 0:
-                Xs[i, j] = vector_id
-            else:
-                Xs[i, j] = 0
-            j += 1
-            if j >= max_length:
-                break
-    return Xs
-
-
-def get_cls_targets(tags, tag2ind):
-    ys = np.zeros((len(tags), len(tag2ind.keys())), dtype='int32')
-    print(ys.shape)
-    for i, tag in enumerate(tags):
-        vector_id = tag2ind[tag]
-        if vector_id >= 0:
-            ys[i, vector_id] = 1
-        else:
-            ys[i, vector_id] = 0
-    return ys
-
-
-def get_seq_targets(doc_tags, max_length, tag2ind):
-    ys = np.zeros((len(doc_tags), max_length, len(tag2ind.keys())), dtype='int32')
-    for i, doc in enumerate(doc_tags):
-        j = 0
-        for tag in doc:
-            vector_id = tag2ind[tag]
-            if vector_id >= 0:
-                ys[i, j, vector_id] = 1
-            else:
-                ys[i, j, vector_id] = 0
-            j += 1
-            if j >= max_length:
-                break
-    return ys
+def calculate_class_weight(y):
+    train_y = np.argmax(y, axis=-1)
+    class_weights = compute_class_weight('balanced', np.unique(train_y), train_y)
+    print('Calculated class_weights: {}'.format(class_weights))
+    return class_weights
 
 
 def train(train_X, train_y, dev_data, test_data,
-          lstm_settings, tag2ind,
+          lstm_settings, tag2ind, embeddings,
           batch_size=100,
           nb_epoch=5, logs_name='logs.txt', model_name='models/weights.hdf5'):
 
-    # print("Loading spaCy")
-    # nlp = spacy.load('en_vectors_web_lg')
-    # nlp.add_pipe(nlp.create_pipe('sentencizer'))
-    # nlp.tokenizer = WhitespaceTokenizer(nlp.vocab)
-    # print(nlp.pipeline)
-    #
-    embeddings = get_embeddings(nlp.vocab)
     print(embeddings.shape)
 
     model = compile_lstm(embeddings, lstm_settings)
-
-    # print("Parsing texts...")
-    # train_docs = list(nlp.pipe(train_texts))
-    # dev_docs = list(nlp.pipe(dev_texts))
-    # test_docs = list(nlp.pipe(test_texts))
-    #
-    # train_X = get_features(train_docs, lstm_settings['max_length'])
-    # dev_X = get_features(dev_docs, lstm_settings['max_length'])
-    # test_X = get_features(test_docs, lstm_settings['max_length'])
-    #
-    # print('Got X: {}, {}'.format(train_X.shape, dev_X.shape))
-    #
-    # train_tags = get_cls_targets(train_tags, tag2ind)
-    # dev_tags = get_cls_targets(dev_tags, tag2ind)
-    # test_tags = get_cls_targets(test_tags, tag2ind)
-    #
-    # print('Got y: {}, {}'.format(train_tags.shape, dev_tags.shape))
-    #
-
-    train_y = np.argmax(train_y, axis=-1)
-    class_weights = compute_class_weight('balanced', np.unique(train_y), train_y)
-    print('Calculated class_weights: {}'.format(class_weights))
 
     metrics = Metrics(dev_data, tag2ind, logs_name)
 
@@ -151,17 +62,17 @@ def train(train_X, train_y, dev_data, test_data,
 
     model.fit(train_X, train_y,
               validation_data=dev_data,
-              class_weight=class_weights,
+              class_weight=calculate_class_weight(train_y),
               epochs=nb_epoch,
               callbacks=[metrics, checkpointer],
               batch_size=batch_size,
               shuffle=True)
 
     print('Evaluating on dev')
-    print(evaluate(model, dev_data, tag2ind))
+    evaluate(model, dev_data, tag2ind)
 
     print('Evaluating on test')
-    print(evaluate(model, test_data, tag2ind))
+    evaluate(model, test_data, tag2ind)
 
     return model
 
@@ -224,5 +135,7 @@ def evaluate(model, test_data, tag2ind):
 
     print(tag2ind.keys())
     print(confusion_matrix(val_targ, val_predict))
+
+    print(accuracy_score(val_targ, val_predict))
 
     return result

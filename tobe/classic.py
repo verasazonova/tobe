@@ -9,7 +9,7 @@ from sklearn.utils.class_weight import compute_class_weight
 from sklearn.svm import SVC
 
 from tobe.corpus import read_context_corpus
-from tobe.dl import WhitespaceTokenizer
+from tobe.main import WhitespaceTokenizer
 
 
 def create_mapping(column):
@@ -100,7 +100,6 @@ def main():
     clf.fit(train_X, train_y)
 
     predicted = clf.predict(dev_X)
-    precision, recall, f_score, true_sum = precision_recall_fscore_support(dev_y, predicted)
     print(classification_report(dev_y, predicted))
 
 
