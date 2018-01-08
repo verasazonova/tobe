@@ -10,7 +10,7 @@ from collections import defaultdict
 from keras.callbacks import Callback, ModelCheckpoint
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.utils.class_weight import compute_class_weight
-
+from keras.models import load_model
 
 class Metrics(Callback):
     def __init__(self, validation_data, tag2ind, logs_name):
@@ -91,7 +91,7 @@ def get_cls_targets(tags, tag2ind):
     return ys
 
 
-def get_seq_targets(doc_tags,max_length, tag2ind):
+def get_seq_targets(doc_tags, max_length, tag2ind):
     ys = np.zeros((len(doc_tags), max_length, len(tag2ind.keys())), dtype='int32')
     for i, doc in enumerate(doc_tags):
         j = 0
@@ -157,7 +157,7 @@ def train(train_texts, train_tags, dev_texts, dev_tags, test_texts, test_tags,
               batch_size=batch_size,
               shuffle=True)
 
-    evaluate(model, (test_X, test_tags), tag2ind)
+    print(evaluate(model, (test_X, test_tags), tag2ind))
 
     return model
 
@@ -197,7 +197,13 @@ def get_embeddings(vocab):
     return vocab.vectors.data
 
 
+def read_model(filename):
+    return load_model(filename)
+
+
 def evaluate(model, test_data, tag2ind):
+    print(test_data[0].shape)
+    print(test_data[1].shape)
     val_predict = np.argmax(model.predict(test_data[0]), axis=-1)
     val_targ = np.argmax(test_data[1], axis=-1)
 
@@ -212,6 +218,6 @@ def evaluate(model, test_data, tag2ind):
     precision, recall, f_score, _ = precision_recall_fscore_support(val_targ, val_predict, average='micro')
     for m, name in [(f_score, 'f1'), (precision, 'precision'), (recall, 'recall')]:
         result['OVERALL: {}'.format(name)] = m
-        print('\nOVERALL: {}'.format(name))
+        print('\nOVERALL: {} {}'.format(name, m))
 
     return result

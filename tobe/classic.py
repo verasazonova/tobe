@@ -32,20 +32,23 @@ def dataframe_to_arrays(df):
     docs = nlp.pipe(texts)
 
     max_len = len(texts[0].split())
+    print('Max len', max_len)
 
     Xs = get_features(docs, max_len)
+    print('Got X', Xs.shape)
 
-    ys = get_cls_targets(tags, mappings[0])
+    ys = get_cls_targets(tags, max_len, mappings[0])
+    print('Got y', ys.shape)
 
     feats = []
     for i, mapping in mappings.items():
         if i != 0:
-            feats.append(get_cls_targets(list(df[df.columns[i]]), mapping))
+            feats.append(get_cls_targets(list(df[df.columns[i]]), max_len, mapping))
 
+    print('Got feats', [f.shape for f in feats])
+
+    Xs = np.concatenate([Xs] + feats, axis=1)
     print(Xs.shape)
-    print(ys.shape)
-    print(f.shape for f in feats)
-
 
 
 def get_features(docs, max_length):
@@ -56,18 +59,19 @@ def get_features(docs, max_length):
         j = 0
         for token in doc:
             Xs[i, j:j+dim] = token.vector
+            j += dim
     return Xs
 
 
-def get_cls_targets(tags, tag2ind):
-    ys = np.zeros((len(tags), len(tag2ind.keys())), dtype='int32')
-    print(ys.shape)
+def get_cls_targets(tags, max_length, tag2ind):
+    dim = min(len(tags[0].split()), max_length)
+    print(dim)
+    print(len(tags))
+    ys = np.zeros((len(tags), dim), dtype='int32')
     for i, tag in enumerate(tags):
-        vector_id = tag2ind[tag]
-        if vector_id >= 0:
-            ys[i, vector_id] = 1
-        else:
-            ys[i, vector_id] = 0
+        for j, t in enumerate(tag.split()):
+            if j< dim:
+                ys[i, j] = tag2ind[t]
     return ys
 
 

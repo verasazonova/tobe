@@ -15,7 +15,7 @@ FORMAT = "%(asctime)-15s %(clientip)s %(user)-8s %(message)s"
 logging.basicConfig(format=FORMAT)
 
 
-def train(num_epochs, filename, logs_filename, model_name):
+def train(num_epochs, filename, logs_filename, model_name, evaluate=False):
     tag2ind = {key: i for i, key in enumerate([mask] + TO_BE_VARIANTS)}
 
     df = read_context_corpus(filename)
@@ -42,10 +42,18 @@ def train(num_epochs, filename, logs_filename, model_name):
     print('Created tag index: {}'.format(tag2ind))
     print('Starting to train with settings: {}'.format(settings))
 
-    dl.train(train_texts, train_tags, dev_texts, dev_tags, test_texts, test_tags,
-             settings, tag2ind,
-             batch_size=32, nb_epoch=num_epochs,
-             logs_name=logs_filename, model_name=model_name)
+    if evaluate:
+        print('reading the model')
+        model = dl.read_model(model_name)
+        print('Evaluating')
+        result = dl.evaluate(model, (test_texts, test_tags), tag2ind)
+        print(result)
+
+    else:
+        dl.train(train_texts, train_tags, dev_texts, dev_tags, test_texts, test_tags,
+                 settings, tag2ind,
+                 batch_size=32, nb_epoch=num_epochs,
+                 logs_name=logs_filename, model_name=model_name)
 
 
 def run(filename):
@@ -54,18 +62,20 @@ def run(filename):
         corpus = Guttenberg(fin, 1, CONTEXT_LENGTH, with_pos=True, with_direct_speech=True)
 
 
+
 def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--train', action='store_true', help='Train model')
-    parser.add_argument('-n', '--num_epochs', help='Num epochs')
+    parser.add_argument('--evaluate', action='store_true', help='Train model')
+    parser.add_argument('-n', '--num_epochs', default='0', help='Num epochs')
     parser.add_argument('--filename', help='Filename')
     parser.add_argument('--logs', help='Logs filename')
     parser.add_argument('--model', help='Model filename')
     parser.add_argument('--run', action='store_true', help='Train model')
     arguments = parser.parse_args()
 
-    if arguments.train:
-        train(int(arguments.num_epochs), arguments.filename, arguments.logs, arguments.model)
+    if arguments.train or arguments.evaluate:
+        train(int(arguments.num_epochs), arguments.filename, arguments.logs, arguments.model, arguments.evaluate)
 
     elif arguments.run:
         print(sys.stdout.encoding)
