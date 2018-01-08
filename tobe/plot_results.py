@@ -14,7 +14,6 @@ def plot(filenames):
     for filename in filenames:
         df = pd.read_csv(filename)
 
-        plt.figure()
         f, ax_array = plt.subplots(3, 3, sharex=True, sharey=False)
 
         i = 0
@@ -29,16 +28,29 @@ def plot(filenames):
                 ax.set_title(name)
                 i += 1
 
-        plt.savefig('scores.pdf')
+        plt.savefig('scores_{}.pdf'.format(filename))
 
     plt.figure()
 
     for filename in filenames:
         df = pd.read_csv(filename)
-        plt.plot(df['loss'])
+        plt.grid()
+        plt.plot(df['loss'], label='loss {}'.format(filename))
         plt.plot(df['val_loss'])
         plt.legend()
-        plt.savefig('losses.pdf')
+
+    plt.savefig('losses.pdf')
+
+    plt.figure()
+
+    for filename in filenames:
+        df = pd.read_csv(filename)
+        plt.grid()
+        plt.plot(df['acc'], label='acc {}'.format(filename))
+        plt.plot(df['val_acc'])
+        plt.legend()
+
+    plt.savefig('accuracy.pdf')
 
 
 def main():

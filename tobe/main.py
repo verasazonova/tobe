@@ -132,7 +132,7 @@ def train_or_evaluate(num_epochs, filename, logs_filename, model_name, evaluate=
 
     X, y, embeddings = featurize(texts, tags, tag2ind)
 
-    train_X, X, train_y, y = train_test_split(X, y, test_size=0.2, stratify=y)
+    train_X, X, train_y, y = train_test_split(X, y, test_size=0.2, stratify=y, random_state=1)
 
     logging.info('Read in {} texts and {} tags, {}, {}'.format(len(train_X), len(train_y), len(X), len(y)))
     test_X, dev_X, test_y, dev_y = train_test_split(X, y, test_size=0.5, stratify=y)
