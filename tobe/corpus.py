@@ -138,7 +138,7 @@ def save_context_corpus(corpus, filename, num_lines=None):
 
 
 def read_context_corpus(filename):
-    df = pd.read_csv(filename, header=-1)
+    df = pd.read_csv(filename, header=-1, dtype=str)
     return df
 
 
