@@ -12,6 +12,9 @@ from keras.models import load_model
 
 
 class Metrics(Callback):
+    """A metrics class to calculate precision, recall and f1 score at the end of each epoch
+
+    """
     def __init__(self, validation_data, tag2ind, logs_name):
         super().__init__()
         self.validation_data = validation_data
@@ -108,12 +111,8 @@ def compile_lstm(embeddings, settings):
     return model
 
 
-def get_embeddings(vocab):
-    return vocab.vectors.data
-
-
 def read_model(filename):
-    return load_model(filename)
+    return load_model(filename, compile=False)
 
 
 def evaluate(model, test_data, tag2ind):

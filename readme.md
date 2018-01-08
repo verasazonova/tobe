@@ -139,11 +139,30 @@ Context = 10
 
 ### Installation
 
+Install icu4c
+
     brew install icu4c
     [...]
-    $ ls /usr/local/Cellar/icu4c/
-    58.2
-    $ export ICU_VERSION=58
-    $ export PYICU_INCLUDES=/usr/local/Cellar/icu4c/58.2/include
-    $ export PYICU_LFLAGS=-L/usr/local/Cellar/icu4c/58.2/lib
-    $ pip install pyicu
+    ls /usr/local/Cellar/icu4c/
+    >> 58.2
+    export ICU_VERSION=58
+    export PYICU_INCLUDES=/usr/local/Cellar/icu4c/58.2/include
+    export PYICU_LFLAGS=-L/usr/local/Cellar/icu4c/58.2/lib
+    pip install pyicu
+    
+In an new pyenv install requirements
+
+    pyenv virtualenv 3.6.2 tobe36
+    pyenv activate tobe36 
+    
+    pip install -r requirements.txt   
+    
+Download spacy models
+
+    python -m spacy download en
+    python -m spacy download en_vectors_web_lg 
+    
+Download tobe model and put it into the tobe/models directory
+
+    ls models/
+    >> weights_5.hd5f    

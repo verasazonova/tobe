@@ -1,9 +1,6 @@
-from numpy.random import choice, sample
 from collections import defaultdict
 import os.path
 import spacy
-from polyglot.detect import Detector
-from polyglot.detect.base import UnknownLanguage
 import re
 import argparse
 import csv
@@ -15,17 +12,6 @@ mask = '----'
 
 def preprocess(text):
     return re.sub('\s+', ' ', text.strip())
-
-
-def mask_paragraph(paragraph_tokens, tomask):
-    if isinstance(tomask, int):
-        inds = [i for i, token in enumerate(paragraph_tokens) if token.lower_ in TO_BE_VARIANTS]
-        inds_to_mask = choice(inds, tomask, replace=False)
-    else:
-        inds_to_mask = tomask
-    masked = [mask if i in inds_to_mask else token.text for i, token in enumerate(paragraph_tokens)]
-
-    return masked
 
 
 class Guttenberg():
@@ -47,13 +33,23 @@ class Guttenberg():
         self.max_len = 500
         self.with_direct_speech = with_direct_speech
         self.mask_only = mask_only
-        print('Loaded')
 
     def __del__(self):
         if hasattr(self.fin, 'close'):
             self.fin.close()
 
     def to_context(self, paragraph):
+        """A method to extract examples of masked verb to be with context from a paragraph
+
+        Args:
+            paragraph (str): paragraph's text on a signle line
+
+        Returns:
+            contexts (list(str)): a list of substrings around the masked verb with the length determied by self.context_len
+            tags (list(str)): a list of the masked verbs
+            features (list(str)): a list of other features extracted for the verb (pos, etc)
+        """
+
         contexts = []
         features = []
         tags = []
@@ -122,7 +118,6 @@ def save_context_corpus(corpus, filename, num_lines=None):
         wr = csv.writer(fout, quoting=csv.QUOTE_ALL)
         for i, (context, tag, feature) in enumerate(corpus):
             wr.writerow([tag, context] + feature)
-#            fout.write('{} {}\n'.format(tag, ' '.join(context)))
             if num_lines is not None and i == num_lines:
                 break
 
@@ -133,21 +128,39 @@ def read_context_corpus(filename):
 
 
 def save_english_by_paragraph(filename, filename_out):
-    with open(filename) as fin, open(filename_out, 'w') as fout:
-        paragraph = ''
-        for line in fin:
-            line = line.strip()
-            if line:
-                paragraph += ' ' + line
-            else:
-                if paragraph:
-                    try:
-                        la = Detector(paragraph, quiet=True).language.code
-                    except UnknownLanguage:
-                        la = 'un'
-                    if la == 'en':
-                        fout.write('{}\n'.format(preprocess(paragraph)))
-                        paragraph = ''
+    """Processes the original corpus, collapses paragraphs into a single string and saves english paragraphs
+
+    Args:
+        filename: path to the original corpus
+        filename_out: path where to store the english language corpus
+
+    Returns:
+
+    """
+    try:
+        from polyglot.detect import Detector
+        from polyglot.detect.base import UnknownLanguage
+
+        with open(filename) as fin, open(filename_out, 'w') as fout:
+            paragraph = ''
+            for line in fin:
+                line = line.strip()
+                if line:
+                    paragraph += ' ' + line
+                else:
+                    if paragraph:
+                        try:
+                            la = Detector(paragraph, quiet=True).language.code
+                        except UnknownLanguage:
+                            la = 'un'
+                        if la == 'en':
+                            fout.write('{}\n'.format(preprocess(paragraph)))
+                            paragraph = ''
+    except ImportError:
+        print('Error: polyglot has not been installed')
+        print('to install polyglot:')
+        print('install icu4c - see instruction in the readme file')
+        print('pip install polyglot')
 
 
 def main():
