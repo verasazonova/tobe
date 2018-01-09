@@ -1,3 +1,7 @@
+import sys
+if sys.version_info < (3, 0):
+    sys.stderr.write('This package is written for python3.  Please see README.md for installation')
+    exit(1)
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -11,6 +15,9 @@ import numpy as np
 import spacy
 import tobe.dl as dl
 from tobe.corpus import read_context_corpus, TO_BE_VARIANTS, mask, Guttenberg
+
+CONTEXT_LENGTH = 10
+MODEL_PATH = 'models/weights.hdf5'
 
 
 class WhitespaceTokenizer(object):
@@ -90,20 +97,18 @@ def featurize(texts, tags, tag2ind):
 
     logging.debug("Loading spaCy")
     nlp = spacy.load('en_vectors_web_lg')
-    #nlp = spacy.load('en', disable=['tagger', 'parser', 'ner'])
-    #nlp.add_pipe(nlp.create_pipe('sentencizer'))
     nlp.tokenizer = WhitespaceTokenizer(nlp.vocab)
-    logging.info(nlp.pipeline)
+    logging.debug(nlp.pipeline)
 
-    logging.info("Parsing texts.")
+    logging.debug("Parsing texts.")
     docs = list(nlp.pipe(texts))
     max_len = len(docs[0])
     X = get_features(docs, max_len)
 
-    logging.info('Got X: {}'.format(X.shape))
+    logging.debug('Got X: {}'.format(X.shape))
 
     y = get_cls_targets(tags, tag2ind)
-    logging.info('Got y: {}'.format(y.shape))
+    logging.debug('Got y: {}'.format(y.shape))
 
     embeddings = get_embeddings(nlp.vocab)
 
@@ -123,10 +128,14 @@ def train_or_evaluate(num_epochs, filename, logs_filename, model_name, evaluate=
     Returns:
 
     """
-    logging.info('Preparing the data')
+    logging.info('Preparing the data from {}'.format(filename))
     tag2ind = {key: i for i, key in enumerate([mask] + TO_BE_VARIANTS)}
 
-    df = read_context_corpus(filename)
+    if os.path.exists(filename):
+        df = read_context_corpus(filename)
+    else:
+        logging.error('Input file not found in {}'.format(filename))
+        exit(1)
 
     tags = list(df[df.columns[0]])
     texts = list(df[df.columns[1]])
@@ -134,10 +143,10 @@ def train_or_evaluate(num_epochs, filename, logs_filename, model_name, evaluate=
 
     X, y, embeddings = featurize(texts, tags, tag2ind)
 
-    train_X, X, train_y, y = train_test_split(X, y, test_size=0.2, stratify=y, random_state=1)
+    train_X, X, train_y, y, _, dev_texts = train_test_split(X, y, texts, test_size=0.2, stratify=y, random_state=1)
 
-    logging.info('Read in {} texts and {} tags, {}, {}'.format(len(train_X), len(train_y), len(X), len(y)))
-    test_X, dev_X, test_y, dev_y = train_test_split(X, y, test_size=0.5, stratify=y)
+    logging.debug('Read in {} texts and {} tags, {}, {}'.format(len(train_X), len(train_y), len(X), len(y)))
+    test_X, dev_X, test_y, dev_y, _, dev_texts = train_test_split(X, y, dev_texts, test_size=0.5, stratify=y)
 
     logging.info('Split into {} train {} dev and {} test sets'.format(len(train_X), len(dev_X), len(test_X)))
 
@@ -149,32 +158,41 @@ def train_or_evaluate(num_epochs, filename, logs_filename, model_name, evaluate=
                 'lr': 0.001,
                 }
 
-    logging.info('Created tag index: {}'.format(tag2ind))
-    logging.info('Starting to train with settings: {}'.format(settings))
+    logging.debug('Created tag index: {}'.format(tag2ind))
 
     if evaluate:
         logging.info('Reading the model')
-        model = dl.read_model(model_name)
+        if os.path.exists(model_name):
+            logging.info('Reading model from {}'.format(model_name))
+            model = dl.read_model(model_name)
+        elif os.path.exists(MODEL_PATH):
+            logging.info('Reading default model from {}'.format(MODEL_PATH))
+            model = dl.read_model(MODEL_PATH)
+        else:
+            logging.error('Model not found in {} nor in '.format(model_name, MODEL_PATH))
+            exit(1)
         print('Evaluating on dev')
-        dl.evaluate(model, (dev_X, dev_y), tag2ind)
+        dl.evaluate(model, (dev_X, dev_y), tag2ind, texts=dev_texts)
 
         print('Evaluating on test')
         dl.evaluate(model, (test_X, test_y), tag2ind)
 
     else:
-        logging.info('Training the model')
+        logging.info('Starting to train with settings: {}'.format(settings))
+        os.makedirs(os.path.dirname(model_name), exist_ok=True)
+        logging.info('Saving into {}'.format(model_name))
         dl.train(train_X, train_y, (dev_X, dev_y), (test_X, test_y),
                  settings, tag2ind, embeddings,
                  batch_size=32, nb_epoch=num_epochs,
                  logs_name=logs_filename, model_name=model_name)
 
 
-def run(filename, output_file, context_len=10):
+def run(filenames, output_dir, context_len=CONTEXT_LENGTH):
     """Run the experiment defined in the exerice
 
     Args:
-        filename (str): path to the input file
-        output_file (str): path to the output file (also dubbed to stdout)
+        filenames (list(str)): paths to the input files
+        output_dir (str): path to the output dir (also dubbed to stdout)
         context_len (int): the context length of the model
 
     Returns:
@@ -182,51 +200,69 @@ def run(filename, output_file, context_len=10):
     """
     keys = [mask] + TO_BE_VARIANTS
     tag2ind = {key: i for i, key in enumerate(keys)}
-    with open(filename, 'r', encoding='utf-8') as fin:
-        n = int(fin.readline().strip())
-        logging.debug('Expecting {} masked verbs'.format(n))
-        text = [' '.join(fin.readlines())]
-        corpus = Guttenberg(text, 1, context_len, with_pos=False, with_direct_speech=False, mask_only=True)
 
-        tags = []
-        texts = []
-        for context, tag, feature in corpus:
-            tags.append(tag)
-            texts.append(context)
+    logging.info('Loading the model')
+    if os.path.exists(MODEL_PATH):
+        logging.info('Reading default model from {}'.format(MODEL_PATH))
+        model = dl.read_model(MODEL_PATH)
+    else:
+        logging.error('Model not found in {}'.format(MODEL_PATH))
+        exit(1)
 
-        logging.debug('Read in {} texts and {} tags'.format(len(texts), len(tags)))
+    for filename in filenames:
+        with open(filename, 'r', encoding='utf-8') as fin:
+            n = int(fin.readline().strip())
+            logging.debug('Expecting {} masked verbs'.format(n))
+            text = [' '.join(fin.readlines())]
+            corpus = Guttenberg(text, 1, context_len, with_pos=False, with_direct_speech=False, mask_only=True)
 
-        X, _, _ = featurize(texts, tags, tag2ind)
+            tags = []
+            texts = []
+            for context, tag, feature in corpus:
+                tags.append(tag)
+                texts.append(context)
 
-    model_name = 'models/by_loss/weights_{}.hdf5'.format(context_len)
-    model = dl.read_model(model_name)
+            logging.debug('Read in {} texts and {} tags'.format(len(texts), len(tags)))
 
-    pred = np.argmax(model.predict(X), axis=-1)
-    with open(output_file, 'w') as fout:
-        for p in pred:
-            print(keys[p])
-            fout.write('{}\n'.format(keys[p]))
+            X, _, _ = featurize(texts, tags, tag2ind)
+
+        pred = np.argmax(model.predict(X), axis=-1)
+        with open(os.path.join(output_dir, 'result_{}'.format(filename)), 'w') as fout:
+            for p in pred:
+                print(keys[p])
+                fout.write('{}\n'.format(keys[p]))
+        print('-----')
 
 
 def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--train', action='store_true', help='Train model')
     parser.add_argument('--evaluate', action='store_true', help='Train model')
-    parser.add_argument('-n', '--num_epochs', default='0', help='Num epochs')
-    parser.add_argument('--filename', help='Filename')
-    parser.add_argument('--logs', help='Logs filename')
-    parser.add_argument('--model', help='Model filename')
-    parser.add_argument('--run', action='store_true', help='Train model')
+    parser.add_argument('-n', '--num_epochs', default='50', help='Num epochs')
+    parser.add_argument('--filenames', nargs='+', help='Filename')
+    parser.add_argument('--logs', default='logs/log.csv', help='Logs filename')
+    parser.add_argument('--model', default='models/train/weights.hdf5', help='Path to save the new model')
     arguments = parser.parse_args()
 
-    logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.WARNING)
+    logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.INFO)
 
     if arguments.train or arguments.evaluate:
-        train_or_evaluate(int(arguments.num_epochs), arguments.filename, arguments.logs, arguments.model, arguments.evaluate)
+        if not arguments.filenames:
+            filename = 'resources/processed_corpus_{}.txt'.format(CONTEXT_LENGTH)
+        else:
+            filename = arguments.filenames[0]
+        train_or_evaluate(int(arguments.num_epochs), filename, arguments.logs, arguments.model, arguments.evaluate)
 
-    elif arguments.run:
-        logging.info('Checking the model')
-        run(arguments.filename, 'result.txt')
+    else:
+        if not arguments.filenames:
+            print('Usage: main.py --filenames masked_text_1.txt masked_text_2.txt')
+            print('       main.py -h ')
+            print('for more options')
+            exit()
+
+        logging.info('The output will be printed to stdout and saved in the working directory.')
+        logging.info('Output filename = results_[input_file_name]')
+        run(arguments.filenames, '.')
 
 
 if __name__ == '__main__':

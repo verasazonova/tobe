@@ -65,6 +65,7 @@ def train(train_X, train_y, dev_data, test_data,
     checkpointer = ModelCheckpoint(filepath=model_name, verbose=1, save_best_only=True,
                                    monitor='val_categorical_accuracy')
 
+    logging.info('Fitting with upto {} epochs'.format(nb_epoch))
     model.fit(train_X, train_y,
               validation_data=dev_data,
               class_weight=calculate_class_weight(train_y),
@@ -117,7 +118,7 @@ def read_model(filename):
     return load_model(filename, compile=False)
 
 
-def evaluate(model, test_data, tag2ind):
+def evaluate(model, test_data, tag2ind, texts=None):
     val_predict = np.argmax(model.predict(test_data[0]), axis=-1)
     val_targ = np.argmax(test_data[1], axis=-1)
 
@@ -145,5 +146,10 @@ def evaluate(model, test_data, tag2ind):
 
     print(accuracy_score(val_targ, val_predict))
 
+    if texts:
+        ind2tag = {v: k for k, v in tag2ind.items()}
+        for y, y_pred, text in zip(val_targ, val_predict, texts):
+            if y != y_pred:
+                print('{},{},{},{},{}'.format(ind2tag[y], ind2tag[y_pred], y, y_pred, text))
 
     return result
