@@ -16,12 +16,17 @@ Or install step by step.
 
 1) Libraries
     
+    
     pip install -r requirements.txt   
+    
+    
     
 2) Spacy models
 
+    
     python -m spacy download en
     python -m spacy download en_vectors_web_lg 
+    
     
 Download the weights file and put it into the tobe/models directory
 
