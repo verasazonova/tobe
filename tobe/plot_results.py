@@ -5,7 +5,7 @@ import matplotlib
 import os.path
 
 font = {'family' : 'normal',
-        'size'   : 14}
+        'size'   : 12}
 
 matplotlib.rc('font', **font)
 

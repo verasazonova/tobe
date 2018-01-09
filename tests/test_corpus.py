@@ -2,12 +2,14 @@ from tobe.corpus import Guttenberg, save_context_corpus, read_context_corpus
 
 
 def test_save_corpus():
-    corpus = Guttenberg('resources/corpus.txt', 1, 4, with_pos=False)
+    corpus = Guttenberg('resources/corpus.txt', 1, 4, with_pos=False, with_direct_speech=False)
     save_context_corpus(corpus, 'test_context_corpus.txt', 5)
 
     with open('resources/gold_context_corpus.txt') as fgold, open('resources/test_context_corpus.txt') as fin:
         gold = fgold.readlines()
+        print(gold)
         processed = fin.readlines()
+        print(processed)
         assert gold == processed
 
 

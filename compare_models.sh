@@ -22,7 +22,7 @@ echo "avg,epochs,P,R,F1" > results/results.txt
 for N in 2 5 10 20; do
     echo $N
     python tobe/main.py --model models/train/weights_$N.hdf5 --evaluate --filenames resources/processed_corpus_$N.txt > results/result_$N.txt
-    cat result_$N.txt | grep -e "---," >> results/results.txt
+    cat results/result_$N.txt | grep -e "^---," >> results/results.txt
 done
 
 # Plot context dependence

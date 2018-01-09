@@ -63,7 +63,7 @@ def train(train_X, train_y, dev_data, test_data,
     metrics = Metrics(dev_data, tag2ind, logs_name)
 
     checkpointer = ModelCheckpoint(filepath=model_name, verbose=1, save_best_only=True,
-                                   monitor='val_categorical_accuracy')
+                                   monitor='val_loss')
 
     logging.info('Fitting with upto {} epochs'.format(nb_epoch))
     model.fit(train_X, train_y,
