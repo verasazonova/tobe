@@ -1,3 +1,6 @@
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
 import argparse
 from spacy.tokens import Doc
 import logging
@@ -62,7 +65,6 @@ def get_cls_targets(tags, tag2ind):
         numpy.array(num_samples, num_classes)
     """
     ys = np.zeros((len(tags), len(tag2ind.keys())), dtype='int32')
-    print(ys.shape)
     for i, tag in enumerate(tags):
         vector_id = tag2ind[tag]
         if vector_id >= 0:
@@ -167,7 +169,7 @@ def train_or_evaluate(num_epochs, filename, logs_filename, model_name, evaluate=
                  logs_name=logs_filename, model_name=model_name)
 
 
-def run(filename, output_file, context_len=5):
+def run(filename, output_file, context_len=10):
     """Run the experiment defined in the exerice
 
     Args:
@@ -196,7 +198,7 @@ def run(filename, output_file, context_len=5):
 
         X, _, _ = featurize(texts, tags, tag2ind)
 
-    model_name = 'models/weights_{}.hdf5'.format(context_len)
+    model_name = 'models/by_loss/weights_{}.hdf5'.format(context_len)
     model = dl.read_model(model_name)
 
     pred = np.argmax(model.predict(X), axis=-1)
@@ -217,14 +219,14 @@ def main():
     parser.add_argument('--run', action='store_true', help='Train model')
     arguments = parser.parse_args()
 
-    logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.INFO)
+    logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.WARNING)
 
     if arguments.train or arguments.evaluate:
         train_or_evaluate(int(arguments.num_epochs), arguments.filename, arguments.logs, arguments.model, arguments.evaluate)
 
     elif arguments.run:
         logging.info('Checking the model')
-        run(arguments.filename, 'result.txt', 5)
+        run(arguments.filename, 'result.txt')
 
 
 if __name__ == '__main__':

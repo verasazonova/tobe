@@ -121,14 +121,20 @@ def evaluate(model, test_data, tag2ind):
     val_predict = np.argmax(model.predict(test_data[0]), axis=-1)
     val_targ = np.argmax(test_data[1], axis=-1)
 
+    ctx_len = (test_data[0].shape[1] - 1) / 2
+
     precision, recall, f_score, true_sum = precision_recall_fscore_support(val_targ, val_predict)
+    print('all,{},{},{},{}'.format(ctx_len, precision, recall, f_score))
 
     result = {}
     for m, name in [(f_score, 'f1'), (precision, 'precision'), (recall, 'recall')]:
         for key, ind in tag2ind.items():
             result['{}: {}'.format(name, key)] = m[ind]
 
-    precision, recall, f_score, _ = precision_recall_fscore_support(val_targ, val_predict, average='micro')
+    for avg in ['micro', 'macro', 'weighted']:
+        precision, recall, f_score, _ = precision_recall_fscore_support(val_targ, val_predict, average='micro')
+        print('---,{},{},{},{},{}'.format(avg,ctx_len, precision, recall, f_score))
+
     for m, name in [(f_score, 'f1'), (precision, 'precision'), (recall, 'recall')]:
         result['OVERALL: {}'.format(name)] = m
 
@@ -138,5 +144,6 @@ def evaluate(model, test_data, tag2ind):
     print(confusion_matrix(val_targ, val_predict))
 
     print(accuracy_score(val_targ, val_predict))
+
 
     return result
