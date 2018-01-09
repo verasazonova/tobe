@@ -14,9 +14,11 @@ read -p "Do you want to install? y/N" response
 case "$response" in
         [yY][eE][sS]|[yY])
 
+            echo
             echo "Installing requirements"
             pip install -r requirements.txt
 
+            echo
             echo "Installing spacy models"
             python -m spacy download en
             python -m spacy download en_vectors_web_lg
@@ -35,11 +37,15 @@ case "$response" in
             ;;
 esac
 
+echo
+echo "To run tests run:"
+echo "    pytest tests"
+echo
 echo "To execute the program run:"
 echo "    python tobe/main.py --filenames masked_text_1.txt masked_text_2.txt"
-echo ""
+echo
 echo "The program will write outputs in files result_masked_text_1.txt and result_masked_text_2.txt respectively"
-echo ""
+echo
 echo "Running ./compare_models.sh will recreate the experiments described in the report. "
 echo "Beware it can take up to a few hours"
 
