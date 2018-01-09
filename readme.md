@@ -27,7 +27,7 @@ Spacy models
 Download the weights file and put it into the tobe/models directory
 
     ls models/
-    >> weights_5.hd5f    
+    >> weights.hd5f    
 
 To run tests:
 
