@@ -3,7 +3,7 @@ import argparse
 import spacy
 
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, precision_recall_fscore_support, confusion_matrix
+from sklearn.metrics import classification_report
 from sklearn.naive_bayes import GaussianNB
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.svm import SVC
@@ -80,7 +80,6 @@ def get_cls_targets(tags, max_length, tag2ind):
             if j< dim:
                 ys[i, j] = tag2ind[t]
     return ys
-
 
 
 def main():
