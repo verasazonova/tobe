@@ -28,10 +28,10 @@ def test_read_corpus():
     gold_texts = ['this ebook ---- for the use of <eos> <eos>',
                   'xxxvii . the packet ---- opened 297 <eos> <eos>',
                   'white water . it ---- the first day of',
+                  'seen . three canoes ---- engaged in the fascinating',
                   'in the nearest canoe ---- a fine figure of',
-                  'on the bank had ---- holding his breath .',
-                  'cried , when he ---- close enough to be']
-    gold_tags = ['is', 'is', 'was', 'was', 'been', 'was']
+                  'on the bank had ---- holding his breath .']
+    gold_tags = ['is', 'is', 'was', 'were', 'was', 'been']
 
     tags = list(df[df.columns[0]])
     texts = list(df[df.columns[1]])
