@@ -14,16 +14,12 @@ Run
 
 Or install step by step.  
 
-1) Libraries
-    
-    
+Libraries
+        
     pip install -r requirements.txt   
-    
-    
-    
-2) Spacy models
+        
+Spacy models
 
-    
     python -m spacy download en
     python -m spacy download en_vectors_web_lg 
     
