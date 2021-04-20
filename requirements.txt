@@ -31,7 +31,7 @@ plac==0.9.6
 pluggy==0.6.0
 preshed==1.0.0
 protobuf==3.5.1
-py==1.5.2
+py==1.10.0
 pyparsing==2.2.0
 pytest==3.3.2
 python-dateutil==2.6.1
